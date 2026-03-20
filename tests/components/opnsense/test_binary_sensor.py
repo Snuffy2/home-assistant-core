@@ -218,3 +218,26 @@ def test_pending_notices_sensor_update_paths_param(
         assert s.is_on is expect_is_on
     if expect_pending is not None:
         assert s.extra_state_attributes.get("pending_notices") == expect_pending
+
+
+def test_pending_notices_sensor_guard_branches(make_config_entry):
+    """Pending notices sensor should handle non-mapping and malformed notices payloads."""
+    entry = make_config_entry()
+    desc = BinarySensorEntityDescription(
+        key="notices.pending_notices_present", name="Pending Notices"
+    )
+
+    coord = MagicMock(spec=OPNsenseDataUpdateCoordinator)
+    coord.data = []
+    sensor = OPNsensePendingNoticesPresentBinarySensor(
+        config_entry=entry, coordinator=coord, entity_description=desc
+    )
+    sensor.hass = MagicMock()
+    sensor.entity_id = "binary_sensor.notices"
+    sensor.async_write_ha_state = lambda: None
+    sensor._handle_coordinator_update()
+    assert sensor.available is False
+
+    coord.data = {"notices": None}
+    sensor._handle_coordinator_update()
+    assert sensor.available is False

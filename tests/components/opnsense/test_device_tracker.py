@@ -129,6 +129,27 @@ async def test_async_setup_entry_removes_nonmatching_tracked_macs(
     assert "aa:bb:cc" in updated_data.get(dt_mod.TRACKED_MACS, [])
 
 
+@pytest.mark.asyncio
+async def test_async_setup_entry_handles_non_list_arp_and_non_string_macs(
+    coordinator, make_config_entry
+):
+    """Setup should tolerate malformed ARP payloads without creating entities."""
+    entry = make_config_entry(
+        data={pkg.CONF_DEVICE_UNIQUE_ID: "dev1"},
+        options={dt_mod.CONF_DEVICE_TRACKER_ENABLED: True},
+    )
+    setattr(entry.runtime_data, dt_mod.DEVICE_TRACKER_COORDINATOR, coordinator)
+
+    created: list = []
+    coordinator.data = {"arp_table": {}}
+    await dt_mod.async_setup_entry(MagicMock(), entry, created.extend)
+    assert created == []
+
+    coordinator.data = {"arp_table": [{"mac": None}]}
+    await dt_mod.async_setup_entry(MagicMock(), entry, created.extend)
+    assert created == []
+
+
 def test_handle_coordinator_update_unavailable(coordinator, make_config_entry):
     """Coordinator with invalid data should mark entity unavailable."""
     coordinator.data = None
@@ -218,6 +239,77 @@ def test_handle_coordinator_update_missing_entry_consider_home(coordinator, make
     assert ent.is_connected is True
 
 
+def test_handle_coordinator_update_uses_last_known_details(coordinator, make_config_entry):
+    """Disconnected entities should surface cached hostname and IP metadata."""
+    coordinator.data = {"arp_table": [{"mac": "ff:ee:dd"}]}
+    entry = make_config_entry(data={pkg.CONF_DEVICE_UNIQUE_ID: "dev1"})
+    setattr(entry.runtime_data, dt_mod.DEVICE_TRACKER_COORDINATOR, coordinator)
+
+    ent = dt_mod.OPNsenseScannerEntity(
+        config_entry=entry,
+        coordinator=coordinator,
+        enabled_default=False,
+        mac="aa:bb:cc",
+        mac_vendor=None,
+        hostname=None,
+    )
+    ent._last_known_hostname = "cached-host"
+    ent._last_known_ip = "10.0.0.5"
+    ent.async_write_ha_state = MagicMock()
+
+    ent._handle_coordinator_update()
+    assert ent.is_connected is False
+    assert ent.icon == "mdi:lan-disconnect"
+    assert ent.extra_state_attributes["last_known_hostname"] == "cached-host"
+    assert ent.extra_state_attributes["last_known_ip"] == "10.0.0.5"
+
+
+def test_handle_coordinator_update_tolerates_bad_entry_fields(coordinator, make_config_entry):
+    """Bad hostname/expires values should not crash tracker updates."""
+    coordinator.data = {
+        "arp_table": [
+            {
+                "mac": "aa:bb:cc",
+                "ip": "1.2.3.4",
+                "hostname": 1,
+                "expires": "bad",
+                "type": "arp",
+            }
+        ]
+    }
+    entry = make_config_entry(data={pkg.CONF_DEVICE_UNIQUE_ID: "dev1"})
+    setattr(entry.runtime_data, dt_mod.DEVICE_TRACKER_COORDINATOR, coordinator)
+
+    ent = dt_mod.OPNsenseScannerEntity(
+        config_entry=entry,
+        coordinator=coordinator,
+        enabled_default=False,
+        mac="aa:bb:cc",
+        mac_vendor=None,
+        hostname=None,
+    )
+    ent.async_write_ha_state = MagicMock()
+    ent._handle_coordinator_update()
+    assert ent.hostname is None
+    assert "expires" not in ent.extra_state_attributes
+
+
+def test_device_tracker_property_getters(coordinator, make_config_entry):
+    """Tracker property getters should expose stored values directly."""
+    entry = make_config_entry(data={pkg.CONF_DEVICE_UNIQUE_ID: "dev1"})
+    setattr(entry.runtime_data, dt_mod.DEVICE_TRACKER_COORDINATOR, coordinator)
+    ent = dt_mod.OPNsenseScannerEntity(
+        config_entry=entry,
+        coordinator=coordinator,
+        enabled_default=True,
+        mac="aa:bb:cc",
+        mac_vendor=None,
+        hostname="host",
+    )
+    assert ent.source_type == dt_mod.SourceType.ROUTER
+    assert ent.entity_registry_enabled_default is True
+
+
 @pytest.mark.asyncio
 async def test_restore_last_state_and_device_info(monkeypatch, coordinator, make_config_entry):
     """Restoring last state merges saved attributes into the entity."""
@@ -267,6 +359,31 @@ async def test_restore_last_state_and_device_info(monkeypatch, coordinator, make
     assert any(t[1] == "aa:bb:cc" for t in connections)
     assert via[0] == dt_mod.DOMAIN
     assert via[1] == entry.data[pkg.CONF_DEVICE_UNIQUE_ID]
+
+
+@pytest.mark.asyncio
+async def test_restore_last_state_guard_branches(coordinator, make_config_entry):
+    """Restore should no-op without state and accept datetime values directly."""
+    entry = make_config_entry(data={pkg.CONF_DEVICE_UNIQUE_ID: "dev1"})
+    setattr(entry.runtime_data, dt_mod.DEVICE_TRACKER_COORDINATOR, coordinator)
+    ent = dt_mod.OPNsenseScannerEntity(
+        config_entry=entry,
+        coordinator=coordinator,
+        enabled_default=False,
+        mac="aa:bb:cc",
+        mac_vendor=None,
+        hostname=None,
+    )
+
+    ent.async_get_last_state = AsyncMock(return_value=None)
+    await ent._restore_last_state()
+
+    now = datetime.now().astimezone()
+    last_state = MagicMock()
+    last_state.attributes = {"last_known_connected_time": now}
+    ent.async_get_last_state = AsyncMock(return_value=last_state)
+    await ent._restore_last_state()
+    assert ent.extra_state_attributes["last_known_connected_time"] == now
 
 
 @pytest.mark.asyncio

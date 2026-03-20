@@ -38,6 +38,8 @@ def test_available_property_toggle(make_config_entry, dummy_coordinator):
     assert ent.available is False
     ent._available = True
     assert ent.available is True
+    coord.last_update_success = False
+    assert ent.available is False
 
 
 def test_opnsense_device_name_prefers_title_and_fallback_to_state(

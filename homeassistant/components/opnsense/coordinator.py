@@ -12,7 +12,7 @@ from aiopnsense import OPNsenseClient
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     ATTR_UNBOUND_BLOCKLIST,
@@ -387,6 +387,9 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                 restapi_count,
                 exec_php_count,
             )
+        except Exception as err:
+            raise UpdateFailed(f"Failed to refresh OPNsense data: {err}") from err
+        else:
             return self._state
         finally:
             self._updating = False

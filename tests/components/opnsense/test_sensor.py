@@ -23,6 +23,7 @@ from homeassistant.components.opnsense.coordinator import OPNsenseDataUpdateCoor
 from homeassistant.components.opnsense.sensor import (
     OPNsenseCarpInterfaceSensor,
     OPNsenseDHCPLeasesSensor,
+    OPNsenseFilesystemSensor,
     OPNsenseGatewaySensor,
     OPNsenseInterfaceSensor,
     OPNsenseSpeedtestSensor,
@@ -54,6 +55,26 @@ async def test_async_setup_entry_invalid_state(make_config_entry):
 
     await async_setup_entry(MagicMock(), config_entry, add_entities)
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_vnstat_interface_description_helpers(make_config_entry):
+    """Interface description helpers should tolerate malformed input."""
+    assert sensor_module._build_interface_device_description_map(None) == {}
+    assert sensor_module._build_interface_device_description_map(
+        {"lan": "bad", "wan": {"name": " ", "device": "igc1"}}
+    ) == {}
+
+    config_entry = make_config_entry()
+    assert await sensor_module._resolve_vnstat_interface_descriptions(config_entry, {}) == {}
+
+    client = MagicMock()
+    setattr(config_entry.runtime_data, sensor_module.OPNSENSE_CLIENT, client)
+    client.get_interfaces = None
+    assert await sensor_module._resolve_vnstat_interface_descriptions(config_entry, {}) == {}
+
+    client.get_interfaces = lambda: {"lan": {"name": "LAN", "device": "igc0"}}
+    assert await sensor_module._resolve_vnstat_interface_descriptions(config_entry, {}) == {}
 
 
 @pytest.mark.asyncio
@@ -238,6 +259,59 @@ def test_gateway_sensor_missing_and_missing_prop(make_config_entry):
     s2.async_write_ha_state = lambda: None
     s2._handle_coordinator_update()
     assert s2.available is False
+
+
+def test_vnstat_filesystem_and_interface_guard_branches(make_config_entry):
+    """Extra sensor guard branches should mark entities unavailable cleanly."""
+    entry = make_config_entry()
+    coord = MagicMock(spec=OPNsenseDataUpdateCoordinator)
+
+    vnstat_desc = MagicMock()
+    vnstat_desc.key = "vnstat.invalid"
+    vnstat_desc.name = "vnstat"
+    vnstat = OPNsenseVnstatSensor(
+        config_entry=entry, coordinator=coord, entity_description=vnstat_desc
+    )
+    vnstat.hass = MagicMock()
+    vnstat.entity_id = "sensor.vnstat_invalid"
+    vnstat.async_write_ha_state = lambda: None
+    coord.data = {}
+    vnstat._handle_coordinator_update()
+    assert vnstat.available is False
+
+    vnstat_desc.key = "vnstat.wan.vntoday"
+    coord.data = {"vnstat": {"interfaces": {"wan": {"metrics": {"vntoday": []}}}}}
+    vnstat._handle_coordinator_update()
+    assert vnstat.available is False
+    coord.data = {"vnstat": {"interfaces": {"wan": {"metrics": {"vntoday": {"total_bytes": "x"}}}}}}
+    vnstat._handle_coordinator_update()
+    assert vnstat.available is False
+
+    interface_desc = MagicMock()
+    interface_desc.key = "interface.lan.status"
+    interface_desc.name = "LAN status"
+    interface = OPNsenseInterfaceSensor(
+        config_entry=entry, coordinator=coord, entity_description=interface_desc
+    )
+    interface.hass = MagicMock()
+    interface.entity_id = "sensor.interface_status"
+    interface.async_write_ha_state = lambda: None
+    coord.data = {"interfaces": {"lan": {"status": "down"}}}
+    interface._handle_coordinator_update()
+    assert interface.icon == "mdi:close-network-outline"
+
+    filesystem_desc = MagicMock()
+    filesystem_desc.key = "telemetry.filesystems.root"
+    filesystem_desc.name = "Filesystem"
+    filesystem = OPNsenseFilesystemSensor(
+        config_entry=entry, coordinator=coord, entity_description=filesystem_desc
+    )
+    filesystem.hass = MagicMock()
+    filesystem.entity_id = "sensor.filesystem_root"
+    filesystem.async_write_ha_state = lambda: None
+    coord.data = {"telemetry": {"filesystems": []}}
+    filesystem._handle_coordinator_update()
+    assert filesystem.available is False
 
 
 @pytest.mark.parametrize(

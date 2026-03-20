@@ -32,6 +32,7 @@ from homeassistant.components.opnsense.const import (
     CONF_SYNC_VPN,
 )
 from homeassistant.components.opnsense.coordinator import OPNsenseDataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 
 @pytest.mark.asyncio
@@ -532,6 +533,31 @@ async def test_async_update_data_device_tracker_branch(monkeypatch, make_config_
     assert res == {"dt": True}
     assert called["dt_called"] == 1
     client.reset_query_counts.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_async_update_data_wraps_refresh_errors(monkeypatch, make_config_entry, fake_client):
+    """Coordinator refresh errors should be exposed as UpdateFailed."""
+    entry = make_config_entry({"device_unique_id": "id"})
+    client = fake_client()()
+    coord = OPNsenseDataUpdateCoordinator(
+        hass=MagicMock(),
+        client=client,
+        name="n",
+        update_interval=timedelta(seconds=1),
+        device_unique_id="id",
+        config_entry=entry,
+    )
+
+    async def raising_get_states(_categories):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(coord, "_get_states", raising_get_states)
+
+    with pytest.raises(UpdateFailed, match="Failed to refresh OPNsense data: boom"):
+        await coord._async_update_data()
+
+    assert coord._updating is False
 
 
 @pytest.mark.asyncio

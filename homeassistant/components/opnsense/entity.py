@@ -45,7 +45,7 @@ class OPNsenseBaseEntity(CoordinatorEntity[OPNsenseDataUpdateCoordinator]):
     @property
     def available(self) -> bool:
         """Return whether entity is available."""
-        return self._available
+        return getattr(self.coordinator, "last_update_success", True) and self._available
 
     @property
     def opnsense_device_name(self) -> str | None:

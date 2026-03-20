@@ -194,6 +194,29 @@ async def test_validate_input_exception_mapping(monkeypatch, exc_key, expected):
     assert res.get("base") == expected
 
 
+@pytest.mark.asyncio
+async def test_validate_input_client_error_maps_to_cannot_connect(monkeypatch):
+    """Generic aiohttp and socket errors should map to cannot_connect."""
+
+    async def _raise_client_error(*args, **kwargs):
+        raise aiohttp.ClientError("boom")
+
+    monkeypatch.setattr(cf_mod, "_handle_user_input", _raise_client_error)
+    errors = await cf_mod.validate_input(
+        hass=MagicMock(), user_input={}, errors={}, config_step="user"
+    )
+    assert errors["base"] == "cannot_connect"
+
+    async def _raise_socket_error(*args, **kwargs):
+        raise cf_mod.socket.gaierror("boom")
+
+    monkeypatch.setattr(cf_mod, "_handle_user_input", _raise_socket_error)
+    errors = await cf_mod.validate_input(
+        hass=MagicMock(), user_input={}, errors={}, config_step="user"
+    )
+    assert errors["base"] == "cannot_connect"
+
+
 def test_validate_firmware_version_raises():
     """_validate_firmware_version should raise BelowMinFirmware for old versions."""
     # pick an obviously old version
@@ -274,6 +297,32 @@ async def test_get_dt_entries_preserves_missing_selected_devices(monkeypatch, fa
         selected_devices=["AA-BB-CC-DD-EE-FF"],
     )
     assert res["aa:bb:cc:dd:ee:ff"] == "Not currently detected [aa:bb:cc:dd:ee:ff]"
+
+
+def test_config_flow_helper_guard_branches(monkeypatch):
+    """Cover MAC parsing and device-label fallback branches."""
+    assert cf_mod.normalize_mac_address(123) is None
+    assert cf_mod._parse_manual_devices(None) == []
+    assert cf_mod._build_selected_device_entries(["not-a-mac", "AA-BB-CC-DD-EE-FF"]) == {
+        "aa:bb:cc:dd:ee:ff": "Not currently detected [aa:bb:cc:dd:ee:ff]"
+    }
+    assert (
+        cf_mod._format_detected_device_label({"mac": "AA-BB-CC-DD-EE-FF", "hostname": ""})
+        == "aa:bb:cc:dd:ee:ff [aa:bb:cc:dd:ee:ff]"
+    )
+    assert (
+        cf_mod._format_detected_device_label(
+            {
+                "mac": "aa:bb:cc:dd:ee:ff",
+                "ip": "192.168.1.10",
+                "manufacturer": "Netgate",
+            }
+        )
+        == "192.168.1.10 [Netgate | aa:bb:cc:dd:ee:ff]"
+    )
+
+    monkeypatch.setattr(cf_mod.re, "split", lambda *args, **kwargs: [123, "AA-BB-CC-DD-EE-FF"])
+    assert cf_mod._parse_manual_devices("ignored") == ["aa:bb:cc:dd:ee:ff"]
 
 
 def test_build_user_input_and_granular_and_options_schemas_defaults():
@@ -437,6 +486,80 @@ async def test_async_step_import_preserves_import_options(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_handle_user_input_unknown_firmware_and_missing_device_id(monkeypatch):
+    """_handle_user_input should translate firmware parse failures and missing ids."""
+
+    fake_client = MagicMock()
+    fake_client.get_host_firmware_version = AsyncMock(return_value="not-a-version")
+    fake_client.set_use_snake_case = AsyncMock()
+    fake_client.get_system_info = AsyncMock(return_value={})
+    fake_client.get_device_unique_id = AsyncMock(return_value=None)
+
+    async def _fake_clean(user_input):
+        user_input[cf_mod.CONF_URL] = "https://router.example"
+
+    monkeypatch.setattr(cf_mod, "_clean_and_parse_url", _fake_clean)
+    monkeypatch.setattr(cf_mod, "_get_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(cf_mod, "_validate_firmware_version", MagicMock(side_effect=ValueError))
+
+    with pytest.raises(cf_mod.UnknownFirmware):
+        await cf_mod._handle_user_input(
+            hass=MagicMock(),
+            user_input={
+                cf_mod.CONF_URL: "router.example",
+                cf_mod.CONF_USERNAME: "u",
+                cf_mod.CONF_PASSWORD: "p",
+            },
+            config_step="user",
+        )
+
+    monkeypatch.setattr(cf_mod, "_validate_firmware_version", lambda version: None)
+    user_input = {
+        cf_mod.CONF_URL: "router.example",
+        cf_mod.CONF_USERNAME: "u",
+        cf_mod.CONF_PASSWORD: "p",
+    }
+    with pytest.raises(cf_mod.MissingDeviceUniqueID):
+        await cf_mod._handle_user_input(
+            hass=MagicMock(),
+            user_input=user_input,
+            config_step="user",
+        )
+    assert user_input[cf_mod.CONF_NAME] == "OPNsense"
+
+
+@pytest.mark.asyncio
+async def test_get_dt_entries_skips_empty_mac_and_handles_empty_arp(monkeypatch, fake_client):
+    """_get_dt_entries should skip empty MACs and return selected entries when ARP is empty."""
+    client_cls = fake_client()
+
+    async def _get_arp_table_empty_mac(self, resolve_hostnames=True):
+        return [{"mac": "", "ip": "192.168.1.10"}, {"mac": "AA-BB-CC-DD-EE-FF"}]
+
+    setattr(client_cls, "get_arp_table", _get_arp_table_empty_mac)
+    monkeypatch.setattr(cf_mod, "OPNsenseClient", client_cls)
+    monkeypatch.setattr(cf_mod, "async_create_clientsession", lambda *a, **k: MagicMock())
+
+    result = await cf_mod._get_dt_entries(
+        hass=MagicMock(),
+        config={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        selected_devices=[],
+    )
+    assert list(result) == ["aa:bb:cc:dd:ee:ff"]
+
+    async def _get_arp_table_empty(self, resolve_hostnames=True):
+        return []
+
+    setattr(client_cls, "get_arp_table", _get_arp_table_empty)
+    result = await cf_mod._get_dt_entries(
+        hass=MagicMock(),
+        config={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        selected_devices=["AA-BB-CC-DD-EE-FF"],
+    )
+    assert result == {"aa:bb:cc:dd:ee:ff": "Not currently detected [aa:bb:cc:dd:ee:ff]"}
+
+
+@pytest.mark.asyncio
 async def test_async_step_reauth_confirm_updates_existing_entry(monkeypatch):
     """Reauth should validate new credentials and request a reload of the existing entry."""
     flow = cf_mod.OPNsenseConfigFlow()
@@ -475,6 +598,115 @@ async def test_async_step_reauth_confirm_updates_existing_entry(monkeypatch):
     assert flow.async_update_reload_and_abort.call_args.kwargs["data_updates"][
         cf_mod.CONF_USERNAME
     ] == "new-user"
+
+
+@pytest.mark.asyncio
+async def test_async_step_user_and_reconfigure_show_forms(make_config_entry):
+    """Initial and reconfigure steps should render forms before submission."""
+    flow = cf_mod.OPNsenseConfigFlow()
+    flow.hass = MagicMock()
+
+    result = await flow.async_step_user(user_input={})
+    assert result["type"] == "form"
+    assert result["step_id"] == "user"
+    assert result["description_placeholders"]["firmware"] == "Unknown"
+
+    reconfigure_entry = make_config_entry(
+        data={
+            cf_mod.CONF_NAME: "Router",
+            cf_mod.CONF_URL: "https://router.example",
+            cf_mod.CONF_USERNAME: "user",
+            cf_mod.CONF_PASSWORD: "pass",
+            cf_mod.CONF_DEVICE_UNIQUE_ID: "router-id",
+        }
+    )
+    flow._get_reconfigure_entry = lambda: reconfigure_entry
+    result = await flow.async_step_reconfigure(user_input=None)
+    assert result["type"] == "form"
+    assert result["step_id"] == "reconfigure"
+
+
+@pytest.mark.asyncio
+async def test_async_step_reconfigure_updates_existing_entry(monkeypatch, make_config_entry):
+    """Reconfigure should validate, enforce unique id, and request a reload."""
+    flow = cf_mod.OPNsenseConfigFlow()
+    flow.hass = MagicMock()
+
+    async def _fake_validate_input(hass, user_input, config_step, errors, expected_id=None):
+        return {}
+
+    reconfigure_entry = make_config_entry(
+        data={
+            cf_mod.CONF_NAME: "Router",
+            cf_mod.CONF_URL: "https://router.example",
+            cf_mod.CONF_USERNAME: "old-user",
+            cf_mod.CONF_PASSWORD: "old-pass",
+            cf_mod.CONF_DEVICE_UNIQUE_ID: "router-id",
+        }
+    )
+    monkeypatch.setattr(cf_mod, "validate_input", _fake_validate_input)
+    flow._get_reconfigure_entry = lambda: reconfigure_entry
+    flow.async_set_unique_id = AsyncMock()
+    flow._abort_if_unique_id_mismatch = MagicMock()
+    flow.async_update_reload_and_abort = MagicMock(
+        return_value={"type": "abort", "reason": "reconfigure_successful"}
+    )
+
+    result = await flow.async_step_reconfigure(
+        {
+            cf_mod.CONF_URL: "https://router.example",
+            cf_mod.CONF_USERNAME: "new-user",
+            cf_mod.CONF_PASSWORD: "new-pass",
+            cf_mod.CONF_VERIFY_SSL: True,
+        }
+    )
+    assert result["reason"] == "reconfigure_successful"
+    flow.async_set_unique_id.assert_awaited_once_with("router-id")
+    flow._abort_if_unique_id_mismatch.assert_called_once()
+    flow.async_update_reload_and_abort.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_step_import_abort_and_reauth_show_form(monkeypatch, make_config_entry):
+    """Import failures should abort, and reauth should render and delegate correctly."""
+    flow = cf_mod.OPNsenseConfigFlow()
+    flow.hass = MagicMock()
+
+    async def _import_errors(hass, user_input, config_step, errors, expected_id=None):
+        return {"base": "cannot_connect"}
+
+    monkeypatch.setattr(cf_mod, "validate_input", _import_errors)
+    result = await flow.async_step_import(
+        {
+            cf_mod.CONF_NAME: "Imported Router",
+            cf_mod.CONF_URL: "https://router.example",
+            cf_mod.CONF_USERNAME: "api-key",
+            cf_mod.CONF_PASSWORD: "api-secret",
+            cf_mod.CONF_DEVICE_UNIQUE_ID: "router-id",
+        }
+    )
+    assert result["type"] == "abort"
+    assert result["reason"] == "cannot_connect"
+
+    sentinel = {"type": "form", "step_id": "reauth_confirm"}
+    flow.async_step_reauth_confirm = AsyncMock(return_value=sentinel)
+    assert await flow.async_step_reauth({}) == sentinel
+
+    reauth_entry = make_config_entry(
+        data={
+            cf_mod.CONF_NAME: "Router",
+            cf_mod.CONF_URL: "https://router.example",
+            cf_mod.CONF_USERNAME: "old-user",
+            cf_mod.CONF_PASSWORD: "old-pass",
+            cf_mod.CONF_DEVICE_UNIQUE_ID: "router-id",
+        }
+    )
+    flow = cf_mod.OPNsenseConfigFlow()
+    flow.hass = MagicMock()
+    flow._get_reauth_entry = lambda: reauth_entry
+    result = await flow.async_step_reauth_confirm()
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
 
 
 @pytest.mark.asyncio
@@ -640,3 +872,40 @@ async def test_options_flow_init_selected_mode_shows_picker_step(monkeypatch, ma
     )
     assert result["type"] == "form"
     assert result["step_id"] == "device_tracker"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_init_and_device_tracker_guard_branches(make_config_entry):
+    """Options flow should render init form and clear device selections when disabled."""
+    config_entry = make_config_entry(
+        data={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+            cf_mod.TRACKED_MACS: ["aa:bb:cc:dd:ee:ff"],
+        },
+        options={
+            cf_mod.CONF_DEVICE_TRACKER_ENABLED: False,
+            cf_mod.CONF_DEVICES: ["aa:bb:cc:dd:ee:ff"],
+        },
+    )
+
+    flow = cf_mod.OPNsenseOptionsFlow(config_entry)
+    flow.hass = MagicMock()
+    flow.hass.config_entries = MagicMock()
+    flow.hass.config_entries.async_update_entry = MagicMock()
+    flow.handler = "opnsense"
+    flow.hass.config_entries.async_get_known_entry = MagicMock(return_value=config_entry)
+    flow._config = dict(config_entry.data)
+    flow._options = dict(config_entry.options)
+
+    result = await flow.async_step_init(user_input=None)
+    assert result["type"] == "form"
+    assert result["step_id"] == "init"
+
+    result = await flow.async_step_device_tracker(
+        user_input={cf_mod.CONF_MANUAL_DEVICES: "", cf_mod.CONF_DEVICES: []}
+    )
+    assert result["type"] == "create_entry"
+    assert cf_mod.CONF_DEVICES not in flow._options
+    assert cf_mod.TRACKED_MACS not in flow._config

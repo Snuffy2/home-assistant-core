@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_URL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.diagnostics import async_redact_data
 
 from .const import COORDINATOR, DEVICE_TRACKER_COORDINATOR
 

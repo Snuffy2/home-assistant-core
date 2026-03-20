@@ -49,6 +49,28 @@ def test_is_update_available_false_when_error(make_config_entry, dummy_coordinat
     assert ent.available is False
 
 
+@pytest.mark.asyncio
+async def test_async_setup_entry_respects_sync_option(make_config_entry, dummy_coordinator):
+    """Update platform setup should add entities only when firmware sync is enabled."""
+    entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "id"})
+    setattr(entry.runtime_data, update_module.COORDINATOR, dummy_coordinator)
+
+    created: list = []
+    await update_module.async_setup_entry(MagicMock(), entry, created.extend)
+    assert len(created) == 1
+
+    entry = make_config_entry(
+        data={
+            CONF_DEVICE_UNIQUE_ID: "id",
+            update_module.CONF_SYNC_FIRMWARE_UPDATES: False,
+        }
+    )
+    setattr(entry.runtime_data, update_module.COORDINATOR, dummy_coordinator)
+    created = []
+    await update_module.async_setup_entry(MagicMock(), entry, created.extend)
+    assert created == []
+
+
 @pytest.mark.parametrize(
     ("state_builder", "expect_latest", "expect_series", "expect_latest_condition"),
     [
@@ -189,6 +211,51 @@ def test_get_product_class_and_series_parsing(
         ),
     )
     assert ent._get_product_class(series) == expected
+
+
+def test_get_product_class_and_installed_version_guard_branches(
+    monkeypatch, make_config_entry, dummy_coordinator
+):
+    """Guard branches should return None for malformed firmware metadata."""
+    entry = make_config_entry()
+    ent = OPNsenseFirmwareUpdatesAvailableUpdate(
+        config_entry=entry,
+        coordinator=dummy_coordinator,
+        entity_description=UpdateEntityDescription(
+            key="firmware.update_available", name="Firmware"
+        ),
+    )
+
+    monkeypatch.setattr(update_module, "dict_get", MagicMock(side_effect=TypeError))
+    assert ent._get_installed_version({}) is None
+    assert ent._get_product_class("25") is None
+    assert ent._get_product_class(None) is None
+
+
+def test_get_versions_updates_to_opnsense_package_version(make_config_entry, dummy_coordinator):
+    """Matching versions should still upgrade to the package-provided OPNsense version."""
+    entry = make_config_entry()
+    ent = OPNsenseFirmwareUpdatesAvailableUpdate(
+        config_entry=entry,
+        coordinator=dummy_coordinator,
+        entity_description=UpdateEntityDescription(
+            key="firmware.update_available", name="Firmware"
+        ),
+    )
+    state = {
+        "firmware_update_info": {
+            "status": "update",
+            "product": {
+                "product_version": "1_0_0",
+                "product_latest": "1_0_0",
+                "product_series": "1.0",
+                "product_check": {
+                    "upgrade_packages": [{"name": "opnsense", "new_version": "1_0_1"}]
+                },
+            },
+        }
+    }
+    assert ent._get_versions(state) == ("1_0_0", "1_0_1", "1.0")
 
 
 def test_handle_coordinator_update_sets_attributes(make_config_entry, dummy_coordinator):

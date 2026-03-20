@@ -31,6 +31,7 @@ from homeassistant.components.opnsense.switch import (
     _compile_service_switches,
     _compile_unbound_switches,
     _compile_vpn_switches,
+    async_setup_entry as async_setup_switch_entry,
 )
 from homeassistant.components.switch import SwitchEntityDescription
 
@@ -533,3 +534,275 @@ def test_delay_update_setter_captures_and_clears_remover(monkeypatch, make_confi
     entity.delay_update = False
     assert called["removed"] is True
     assert entity.delay_update is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("compile_fn", "state"),
+    [
+        (_compile_service_switches, None),
+        (_compile_vpn_switches, None),
+        (_compile_unbound_switches, None),
+        (_compile_firewall_rules_switches, {"firewall": {"rules": []}}),
+        (_compile_nat_source_rules_switches, {"firewall": {"nat": {"source_nat": []}}}),
+        (_compile_nat_destination_rules_switches, {"firewall": {"nat": {"d_nat": []}}}),
+        (_compile_nat_one_to_one_rules_switches, {"firewall": {"nat": {"one_to_one": []}}}),
+        (_compile_nat_npt_rules_switches, {"firewall": {"nat": {"npt": []}}}),
+    ],
+)
+async def test_compile_switch_helpers_ignore_invalid_state(make_config_entry, compile_fn, state):
+    """Compile helpers should return no entities for invalid or non-mapping state."""
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+
+    entities = await compile_fn(config_entry, make_coord({}), state)
+
+    assert entities == []
+
+
+@pytest.mark.asyncio
+async def test_switch_async_setup_entry_skips_missing_state(coordinator, ph_hass, make_config_entry):
+    """Switch platform should no-op when coordinator data is missing."""
+    coordinator.data = None
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    setattr(config_entry.runtime_data, COORDINATOR, coordinator)
+    added = []
+
+    await async_setup_switch_entry(ph_hass, config_entry, added.extend)
+
+    assert added == []
+
+
+@pytest.mark.asyncio
+async def test_firewall_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+    """Firewall switches should handle unavailable data and failed toggles."""
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        lambda hass, delay, action: lambda: None,
+    )
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    entity = OPNsenseFirewallRuleSwitch(
+        config_entry=config_entry,
+        coordinator=make_coord({"firewall": {"rules": {}}}),
+        entity_description=SwitchEntityDescription(
+            key="firewall.rule.rule1",
+            name="Firewall: wan: Allow WAN",
+        ),
+    )
+    attach_entity(entity, ph_hass, {"firewall": {"rules": {}}})
+
+    entity._handle_coordinator_update()
+    assert entity.available is False
+    assert entity.icon is None
+
+    entity._client = MagicMock()
+    entity._client.toggle_firewall_rule = AsyncMock(return_value=False)
+    await entity.async_turn_on()
+    await entity.async_turn_off()
+    assert entity._client.toggle_firewall_rule.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rule_key", "rule_data", "expected_attr"),
+    [
+        (
+            "firewall.nat.source_nat.src1",
+            {
+                "firewall": {
+                    "nat": {
+                        "source_nat": {
+                            "src1": {
+                                "uuid": "src1",
+                                "description": "Source NAT",
+                                "%interface": "wan",
+                                "enabled": "1",
+                                "%target": "198.51.100.10",
+                            }
+                        }
+                    }
+                }
+            },
+            ("translate_source", "198.51.100.10"),
+        ),
+        (
+            "firewall.nat.one_to_one.oto1",
+            {
+                "firewall": {
+                    "nat": {
+                        "one_to_one": {
+                            "oto1": {
+                                "uuid": "oto1",
+                                "description": "One to One",
+                                "%interface": "lan",
+                                "enabled": "1",
+                                "external": "203.0.113.2",
+                            }
+                        }
+                    }
+                }
+            },
+            ("external_network", "203.0.113.2"),
+        ),
+        (
+            "firewall.nat.npt.npt1",
+            {
+                "firewall": {
+                    "nat": {
+                        "npt": {
+                            "npt1": {
+                                "uuid": "npt1",
+                                "description": "NPTv6",
+                                "%interface": "lan",
+                                "enabled": "1",
+                                "trackif": "wan",
+                            }
+                        }
+                    }
+                }
+            },
+            ("track_interface", "wan"),
+        ),
+    ],
+)
+async def test_nat_switch_variant_attributes_and_failures(
+    monkeypatch, ph_hass, make_config_entry, rule_key, rule_data, expected_attr
+):
+    """NAT switch variants should expose their type-specific attributes and failure paths."""
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        lambda hass, delay, action: lambda: None,
+    )
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    entity = OPNsenseNATRuleSwitch(
+        config_entry=config_entry,
+        coordinator=make_coord(rule_data),
+        entity_description=SwitchEntityDescription(
+            key=rule_key,
+            name="NAT Rule",
+        ),
+    )
+    attach_entity(entity, ph_hass, rule_data)
+    entity._client = MagicMock()
+    entity._client.toggle_nat_rule = AsyncMock(return_value=False)
+
+    entity._handle_coordinator_update()
+    assert entity.available is True
+    assert entity.extra_state_attributes[expected_attr[0]] == expected_attr[1]
+    assert entity.icon == "mdi:network"
+
+    await entity.async_turn_on()
+    await entity.async_turn_off()
+    assert entity._client.toggle_nat_rule.await_count == 2
+    assert entity.is_on is True
+
+
+@pytest.mark.asyncio
+async def test_service_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+    """Service switch should ignore missing services and handle failed commands."""
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        lambda hass, delay, action: lambda: None,
+    )
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    entity = OPNsenseServiceSwitch(
+        config_entry=config_entry,
+        coordinator=make_coord({"services": [{"id": "svc1", "name": "svc1"}]}),
+        entity_description=SwitchEntityDescription(
+            key="service.svc2.status",
+            name="Service Missing status",
+        ),
+    )
+    attach_entity(entity, ph_hass, {"services": [{"id": "svc1", "name": "svc1"}]})
+    entity._handle_coordinator_update()
+    assert entity.available is False
+
+    entity.coordinator = make_coord(
+        {"services": [{"id": "svc2", "name": "svc2", "status": False}]}
+    )
+    entity.async_write_ha_state = lambda: None
+    entity._client = MagicMock()
+    entity._client.start_service = AsyncMock(return_value=False)
+    entity._client.stop_service = AsyncMock(return_value=False)
+    entity._handle_coordinator_update()
+    await entity.async_turn_on()
+    await entity.async_turn_off()
+    assert entity.icon is None
+
+
+@pytest.mark.asyncio
+async def test_unbound_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+    """Unbound switch should handle invalid state and failed commands."""
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        lambda hass, delay, action: lambda: None,
+    )
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    entity = OPNsenseUnboundBlocklistSwitch(
+        config_entry=config_entry,
+        coordinator=make_coord({}),
+        entity_description=SwitchEntityDescription(
+            key="unbound_blocklist.switch.dnsbl1",
+            name="Unbound Blocklist Primary",
+        ),
+    )
+    attach_entity(entity, ph_hass, {})
+    entity._handle_coordinator_update()
+    assert entity.available is False
+
+    entity._client = MagicMock()
+    entity._client.enable_unbound_blocklist = AsyncMock(return_value=False)
+    entity._client.disable_unbound_blocklist = AsyncMock(return_value=False)
+    await entity.async_turn_on()
+    await entity.async_turn_off()
+    assert entity.is_on is False
+
+
+@pytest.mark.asyncio
+async def test_vpn_switch_server_branch_and_failure_paths(
+    monkeypatch, ph_hass, make_config_entry
+):
+    """VPN switch should expose server attributes and handle invalid branches."""
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        lambda hass, delay, action: lambda: None,
+    )
+    state = {
+        "openvpn": {
+            "servers": {
+                "server1": {
+                    "enabled": True,
+                    "name": "Site Tunnel",
+                    "status": "up",
+                    "endpoint": "vpn.example:1194",
+                }
+            }
+        }
+    }
+    config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
+    entity = OPNsenseVPNSwitch(
+        config_entry=config_entry,
+        coordinator=make_coord(state),
+        entity_description=SwitchEntityDescription(
+            key="openvpn.servers.server1",
+            name="OpenVPN Server Site Tunnel",
+        ),
+    )
+    attach_entity(entity, ph_hass, state)
+    entity._client = MagicMock()
+    entity._client.toggle_vpn_instance = AsyncMock(return_value=False)
+
+    entity._handle_coordinator_update()
+    assert entity.available is True
+    assert entity.extra_state_attributes["status"] == "up"
+    assert entity.icon == "mdi:folder-key-network"
+
+    await entity.async_turn_off()
+    assert entity.is_on is True
+
+    entity.coordinator.data["openvpn"]["other"] = {
+        "server1": {"enabled": True, "uuid": "server1", "name": "Other Tunnel"}
+    }
+    entity._clients_servers = "other"
+    entity.delay_update = False
+    entity._handle_coordinator_update()
+    assert entity.extra_state_attributes["uuid"] == "server1"
