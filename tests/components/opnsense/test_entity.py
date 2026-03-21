@@ -10,12 +10,19 @@ from homeassistant.components.opnsense.entity import OPNsenseBaseEntity, OPNsens
 from homeassistant.util import slugify
 
 
-def test_init_sets_unique_and_name_suffixes(make_config_entry, dummy_coordinator):
+def test_init_sets_unique_and_name_suffixes(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Verify unique_id and name suffix handling for base entities."""
-    entry = make_config_entry({CONF_DEVICE_UNIQUE_ID: "dev-123", "url": "http://x"}, title="MyBox")
+    entry = make_config_entry(
+        {CONF_DEVICE_UNIQUE_ID: "dev-123", "url": "http://x"}, title="MyBox"
+    )
     coord = dummy_coordinator
     ent = OPNsenseBaseEntity(
-        config_entry=entry, coordinator=coord, unique_id_suffix="suf", name_suffix="Name"
+        config_entry=entry,
+        coordinator=coord,
+        unique_id_suffix="suf",
+        name_suffix="Name",
     )
 
     assert hasattr(ent, "unique_id")
@@ -30,11 +37,13 @@ def test_init_sets_unique_and_name_suffixes(make_config_entry, dummy_coordinator
     assert ent.name == "Name"
 
 
-def test_available_property_toggle(make_config_entry, dummy_coordinator):
+def test_available_property_toggle(make_config_entry, dummy_coordinator) -> None:
     """Entity available property reflects internal availability flag."""
     entry = make_config_entry()
     coord = dummy_coordinator
-    ent = OPNsenseBaseEntity(config_entry=entry, coordinator=coord, unique_id_suffix="test")
+    ent = OPNsenseBaseEntity(
+        config_entry=entry, coordinator=coord, unique_id_suffix="test"
+    )
     assert ent.available is False
     ent._available = True
     assert ent.available is True
@@ -44,30 +53,40 @@ def test_available_property_toggle(make_config_entry, dummy_coordinator):
 
 def test_opnsense_device_name_prefers_title_and_fallback_to_state(
     make_config_entry, dummy_coordinator
-):
+) -> None:
     """Device name prefers config entry title and falls back to state name."""
     # when title present
     entry = make_config_entry(
         {CONF_DEVICE_UNIQUE_ID: "dev-123", "url": "http://x"}, title="BoxTitle"
     )
     coord = dummy_coordinator
-    ent = OPNsenseBaseEntity(config_entry=entry, coordinator=coord, unique_id_suffix="test")
+    ent = OPNsenseBaseEntity(
+        config_entry=entry, coordinator=coord, unique_id_suffix="test"
+    )
     assert ent.opnsense_device_name == "BoxTitle"
 
     # when title empty -> falls back to coordinator.data system_info.name
-    entry2 = make_config_entry({CONF_DEVICE_UNIQUE_ID: "dev-123", "url": "http://x"}, title="")
+    entry2 = make_config_entry(
+        {CONF_DEVICE_UNIQUE_ID: "dev-123", "url": "http://x"}, title=""
+    )
     coord2 = MagicMock(spec=OPNsenseDataUpdateCoordinator)
     coord2.data = {"system_info": {"name": "FromState"}}
-    ent2 = OPNsenseBaseEntity(config_entry=entry2, coordinator=coord2, unique_id_suffix="test")
+    ent2 = OPNsenseBaseEntity(
+        config_entry=entry2, coordinator=coord2, unique_id_suffix="test"
+    )
     assert ent2.opnsense_device_name == "FromState"
 
 
-def test_get_opnsense_state_value_nested_lookup(make_config_entry, dummy_coordinator):
+def test_get_opnsense_state_value_nested_lookup(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Nested state lookup returns deep values or None when missing."""
     entry = make_config_entry()
     coord = dummy_coordinator
     coord.data = {"a": {"b": {"c": 5}}}
-    ent = OPNsenseBaseEntity(config_entry=entry, coordinator=coord, unique_id_suffix="test")
+    ent = OPNsenseBaseEntity(
+        config_entry=entry, coordinator=coord, unique_id_suffix="test"
+    )
     assert ent._get_opnsense_state_value("a.b.c") == 5
     assert ent._get_opnsense_state_value("non.existent.path") is None
 
@@ -75,7 +94,7 @@ def test_get_opnsense_state_value_nested_lookup(make_config_entry, dummy_coordin
 @pytest.mark.asyncio
 async def test_async_added_to_hass_sets_client_and_calls_update(
     make_config_entry, dummy_coordinator
-):
+) -> None:
     """async_added_to_hass attaches client and triggers update handler."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -84,7 +103,9 @@ async def test_async_added_to_hass_sets_client_and_calls_update(
     # make_config_entry provides runtime_data; attach a client on it
     entry.runtime_data.opnsense_client = client
 
-    ent = OPNsenseBaseEntity(config_entry=entry, coordinator=coord, unique_id_suffix="test")
+    ent = OPNsenseBaseEntity(
+        config_entry=entry, coordinator=coord, unique_id_suffix="test"
+    )
 
     # stub the entity update handler to observe it being called
     called = {"count": 0}
@@ -103,14 +124,18 @@ async def test_async_added_to_hass_sets_client_and_calls_update(
 
 
 @pytest.mark.asyncio
-async def test_async_added_to_hass_missing_client_raises(make_config_entry, dummy_coordinator):
+async def test_async_added_to_hass_missing_client_raises(
+    make_config_entry, dummy_coordinator
+) -> None:
     """async_added_to_hass raises when runtime client is missing."""
     entry = make_config_entry()
     coord = dummy_coordinator
     # runtime_data has opnsense_client attribute but it's None -> triggers assertion
     entry.runtime_data.opnsense_client = None
 
-    ent = OPNsenseBaseEntity(config_entry=entry, coordinator=coord, unique_id_suffix="test")
+    ent = OPNsenseBaseEntity(
+        config_entry=entry, coordinator=coord, unique_id_suffix="test"
+    )
 
     # avoid writing HA state (which requires hass) by stubbing the handler
     ent._handle_coordinator_update = lambda: None
@@ -119,7 +144,7 @@ async def test_async_added_to_hass_missing_client_raises(make_config_entry, dumm
         await ent.async_added_to_hass()
 
 
-def test_device_info_variants(make_config_entry, dummy_coordinator):
+def test_device_info_variants(make_config_entry, dummy_coordinator) -> None:
     """Device info reflects identifiers and firmware when present."""
     entry = make_config_entry({CONF_DEVICE_UNIQUE_ID: "dev-123"})
     coord = dummy_coordinator
@@ -133,6 +158,8 @@ def test_device_info_variants(make_config_entry, dummy_coordinator):
     # when firmware present
     coord2 = MagicMock(spec=OPNsenseDataUpdateCoordinator)
     coord2.data = {"host_firmware_version": "1.2.3"}
-    ent2 = OPNsenseEntity(config_entry=entry, coordinator=coord2, unique_id_suffix="test")
+    ent2 = OPNsenseEntity(
+        config_entry=entry, coordinator=coord2, unique_id_suffix="test"
+    )
     info2 = ent2.device_info
     assert info2["sw_version"] == "1.2.3"

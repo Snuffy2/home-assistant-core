@@ -150,6 +150,8 @@ def _build_device(
 class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
     """Represent a scanned device."""
 
+    _attr_translation_key = "device_tracker"
+
     def __init__(
         self,
         config_entry: ConfigEntry,
@@ -172,7 +174,6 @@ class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
         self._attr_ip_address: str | None = None
         self._attr_mac_address: str | None = mac
         self._attr_source_type: SourceType = SourceType.ROUTER
-        self._attr_icon: str | None = None
 
     @property
     def source_type(self) -> SourceType:
@@ -322,13 +323,6 @@ class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
             self._attr_extra_state_attributes["last_known_connected_time"] = (
                 self._last_known_connected_time
             )
-
-        try:
-            self._attr_icon = (
-                "mdi:lan-connect" if self.is_connected else "mdi:lan-disconnect"
-            )
-        except TypeError, KeyError, AttributeError:
-            self._attr_icon = "mdi:lan-disconnect"
 
         self.async_write_ha_state()
         # _LOGGER.debug(

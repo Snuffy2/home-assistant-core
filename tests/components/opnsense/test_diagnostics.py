@@ -15,7 +15,7 @@ from homeassistant.components.opnsense.diagnostics import (
 
 async def test_async_get_config_entry_diagnostics_redacts_sensitive_data(
     ph_hass, make_config_entry
-):
+) -> None:
     """Diagnostics should include coordinator data while redacting credentials."""
     entry = make_config_entry(
         data={
@@ -33,7 +33,9 @@ async def test_async_get_config_entry_diagnostics_redacts_sensitive_data(
     entry.runtime_data = SimpleNamespace(
         **{
             COORDINATOR: MagicMock(data={"system_info": {"name": "Router"}}),
-            DEVICE_TRACKER_COORDINATOR: MagicMock(data={"arp_table": [{"mac": "aa:bb"}]}),
+            DEVICE_TRACKER_COORDINATOR: MagicMock(
+                data={"arp_table": [{"mac": "aa:bb"}]}
+            ),
         }
     )
 
@@ -47,9 +49,13 @@ async def test_async_get_config_entry_diagnostics_redacts_sensitive_data(
     assert diagnostics["device_tracker_coordinator"]["arp_table"] == [{"mac": "aa:bb"}]
 
 
-async def test_async_get_device_diagnostics_redacts_device_dict(ph_hass, make_config_entry):
+async def test_async_get_device_diagnostics_redacts_device_dict(
+    ph_hass, make_config_entry
+) -> None:
     """Device diagnostics should include a redacted device payload."""
-    entry = make_config_entry(data={"url": "https://router.example", "device_unique_id": "router"})
+    entry = make_config_entry(
+        data={"url": "https://router.example", "device_unique_id": "router"}
+    )
     entry.as_dict = lambda: {"data": dict(entry.data), "entry_id": entry.entry_id}
     entry.runtime_data = SimpleNamespace(
         **{

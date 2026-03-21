@@ -34,6 +34,7 @@ from homeassistant.components.opnsense.switch import (
     async_setup_entry as async_setup_switch_entry,
 )
 from homeassistant.components.switch import SwitchEntityDescription
+from homeassistant.core import HomeAssistant
 
 
 def make_coord(data: MutableMapping[str, Any]) -> MagicMock:
@@ -43,16 +44,20 @@ def make_coord(data: MutableMapping[str, Any]) -> MagicMock:
     return mock
 
 
-def attach_entity(entity, hass, state: MutableMapping[str, Any]) -> None:
+def attach_entity(entity, hass: HomeAssistant, state: MutableMapping[str, Any]) -> None:
     """Attach Home Assistant state to a switch entity for direct exercise."""
     entity.hass = hass
     entity.coordinator = make_coord(state)
-    entity.entity_id = f"switch.{getattr(entity, '_attr_unique_id', entity.entity_description.key)}"
+    entity.entity_id = (
+        f"switch.{getattr(entity, '_attr_unique_id', entity.entity_description.key)}"
+    )
     entity.async_write_ha_state = lambda: None
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_creates_rest_only_switches(coordinator, ph_hass, make_config_entry):
+async def test_async_setup_entry_creates_rest_only_switches(
+    coordinator, ph_hass, make_config_entry
+) -> None:
     """The switch platform should build entities only from the REST-native state model."""
     created_entities = []
 
@@ -105,8 +110,20 @@ async def test_async_setup_entry_creates_rest_only_switches(coordinator, ph_hass
             },
         },
         "services": [
-            {"id": "svc1", "name": "svc1", "description": "DNS", "locked": 0, "status": True},
-            {"id": "svc2", "name": "svc2", "description": "Locked", "locked": 1, "status": True},
+            {
+                "id": "svc1",
+                "name": "svc1",
+                "description": "DNS",
+                "locked": 0,
+                "status": True,
+            },
+            {
+                "id": "svc2",
+                "name": "svc2",
+                "description": "Locked",
+                "locked": 1,
+                "status": True,
+            },
         ],
         ATTR_UNBOUND_BLOCKLIST: {
             "dnsbl1": {"enabled": "1", "description": "Primary"},
@@ -132,10 +149,15 @@ async def test_async_setup_entry_creates_rest_only_switches(coordinator, ph_hass
     await switch_mod.async_setup_entry(ph_hass, config_entry, _add_entities)
 
     assert len(created_entities) == 9
-    assert any(isinstance(entity, OPNsenseFirewallRuleSwitch) for entity in created_entities)
+    assert any(
+        isinstance(entity, OPNsenseFirewallRuleSwitch) for entity in created_entities
+    )
     assert any(isinstance(entity, OPNsenseNATRuleSwitch) for entity in created_entities)
     assert any(isinstance(entity, OPNsenseServiceSwitch) for entity in created_entities)
-    assert any(isinstance(entity, OPNsenseUnboundBlocklistSwitch) for entity in created_entities)
+    assert any(
+        isinstance(entity, OPNsenseUnboundBlocklistSwitch)
+        for entity in created_entities
+    )
     assert any(isinstance(entity, OPNsenseVPNSwitch) for entity in created_entities)
 
 
@@ -233,7 +255,9 @@ async def test_async_setup_entry_creates_rest_only_switches(coordinator, ph_hass
         ),
     ],
 )
-async def test_compile_rest_rule_switches(make_config_entry, compile_fn, state, expected_key):
+async def test_compile_rest_rule_switches(
+    make_config_entry, compile_fn, state, expected_key
+) -> None:
     """REST-native firewall and NAT helpers should expose the expected entity key."""
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
     coordinator = make_coord(state)
@@ -245,14 +269,28 @@ async def test_compile_rest_rule_switches(make_config_entry, compile_fn, state, 
 
 
 @pytest.mark.asyncio
-async def test_compile_service_unbound_and_vpn_switches(make_config_entry):
+async def test_compile_service_unbound_and_vpn_switches(
+    make_config_entry,
+) -> None:
     """Service, unbound, and VPN helpers should skip invalid rows and create valid entities."""
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
 
     service_state = {
         "services": [
-            {"id": "svc1", "name": "svc1", "description": "DNS", "locked": 0, "status": True},
-            {"id": "svc2", "name": "svc2", "description": "Locked", "locked": 1, "status": True},
+            {
+                "id": "svc1",
+                "name": "svc1",
+                "description": "DNS",
+                "locked": 0,
+                "status": True,
+            },
+            {
+                "id": "svc2",
+                "name": "svc2",
+                "description": "Locked",
+                "locked": 1,
+                "status": True,
+            },
         ]
     }
     unbound_state = {
@@ -272,8 +310,12 @@ async def test_compile_service_unbound_and_vpn_switches(make_config_entry):
         },
     }
 
-    services = await _compile_service_switches(config_entry, make_coord(service_state), service_state)
-    unbound = await _compile_unbound_switches(config_entry, make_coord(unbound_state), unbound_state)
+    services = await _compile_service_switches(
+        config_entry, make_coord(service_state), service_state
+    )
+    unbound = await _compile_unbound_switches(
+        config_entry, make_coord(unbound_state), unbound_state
+    )
     vpn = await _compile_vpn_switches(config_entry, make_coord(vpn_state), vpn_state)
 
     assert len(services) == 1
@@ -288,7 +330,9 @@ async def test_compile_service_unbound_and_vpn_switches(make_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_firewall_switch_updates_and_toggles(monkeypatch, ph_hass, make_config_entry):
+async def test_firewall_switch_updates_and_toggles(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Firewall rule switches should expose state and call the REST toggle API."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -334,7 +378,9 @@ async def test_firewall_switch_updates_and_toggles(monkeypatch, ph_hass, make_co
 
 
 @pytest.mark.asyncio
-async def test_nat_switch_updates_and_toggles(monkeypatch, ph_hass, make_config_entry):
+async def test_nat_switch_updates_and_toggles(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """NAT rule switches should expose rule attributes and toggle through the REST API."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -382,7 +428,9 @@ async def test_nat_switch_updates_and_toggles(monkeypatch, ph_hass, make_config_
 
 
 @pytest.mark.asyncio
-async def test_service_switch_updates_and_toggles(monkeypatch, ph_hass, make_config_entry):
+async def test_service_switch_updates_and_toggles(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Service switches should map service status and call start/stop methods."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -390,7 +438,13 @@ async def test_service_switch_updates_and_toggles(monkeypatch, ph_hass, make_con
     )
     state = {
         "services": [
-            {"id": "svc1", "name": "svc1", "description": "DNS", "locked": 0, "status": False}
+            {
+                "id": "svc1",
+                "name": "svc1",
+                "description": "DNS",
+                "locked": 0,
+                "status": False,
+            }
         ]
     }
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
@@ -423,8 +477,8 @@ async def test_service_switch_updates_and_toggles(monkeypatch, ph_hass, make_con
 
 @pytest.mark.asyncio
 async def test_unbound_switch_handles_missing_data_and_toggles(
-    monkeypatch, ph_hass, make_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Unbound blocklist switches should become unavailable on missing data and toggle by UUID."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -466,14 +520,16 @@ async def test_unbound_switch_handles_missing_data_and_toggles(
 
 @pytest.mark.asyncio
 async def test_vpn_switch_toggles_and_honors_noop_preconditions(
-    monkeypatch, ph_hass, make_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """VPN switches should toggle through the client and skip duplicate actions."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
         lambda hass, delay, action: lambda: None,
     )
-    state = {"openvpn": {"clients": {"client1": {"enabled": False, "name": "Road Warrior"}}}}
+    state = {
+        "openvpn": {"clients": {"client1": {"enabled": False, "name": "Road Warrior"}}}
+    }
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
     entity = OPNsenseVPNSwitch(
         config_entry=config_entry,
@@ -505,7 +561,9 @@ async def test_vpn_switch_toggles_and_honors_noop_preconditions(
     assert entity._client.toggle_vpn_instance.await_count == before
 
 
-def test_delay_update_setter_captures_and_clears_remover(monkeypatch, make_config_entry):
+def test_delay_update_setter_captures_and_clears_remover(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """The base switch delay flag should capture and clear the scheduled remover."""
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
     entity = OPNsenseFirewallRuleSwitch(
@@ -525,7 +583,10 @@ def test_delay_update_setter_captures_and_clears_remover(monkeypatch, make_confi
 
         return _remover
 
-    monkeypatch.setattr("homeassistant.components.opnsense.switch.async_call_later", _fake_async_call_later)
+    monkeypatch.setattr(
+        "homeassistant.components.opnsense.switch.async_call_later",
+        _fake_async_call_later,
+    )
 
     entity.delay_update = True
     assert entity.delay_update is True
@@ -546,11 +607,16 @@ def test_delay_update_setter_captures_and_clears_remover(monkeypatch, make_confi
         (_compile_firewall_rules_switches, {"firewall": {"rules": []}}),
         (_compile_nat_source_rules_switches, {"firewall": {"nat": {"source_nat": []}}}),
         (_compile_nat_destination_rules_switches, {"firewall": {"nat": {"d_nat": []}}}),
-        (_compile_nat_one_to_one_rules_switches, {"firewall": {"nat": {"one_to_one": []}}}),
+        (
+            _compile_nat_one_to_one_rules_switches,
+            {"firewall": {"nat": {"one_to_one": []}}},
+        ),
         (_compile_nat_npt_rules_switches, {"firewall": {"nat": {"npt": []}}}),
     ],
 )
-async def test_compile_switch_helpers_ignore_invalid_state(make_config_entry, compile_fn, state):
+async def test_compile_switch_helpers_ignore_invalid_state(
+    make_config_entry, compile_fn, state
+) -> None:
     """Compile helpers should return no entities for invalid or non-mapping state."""
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
 
@@ -560,7 +626,9 @@ async def test_compile_switch_helpers_ignore_invalid_state(make_config_entry, co
 
 
 @pytest.mark.asyncio
-async def test_switch_async_setup_entry_skips_missing_state(coordinator, ph_hass, make_config_entry):
+async def test_switch_async_setup_entry_skips_missing_state(
+    coordinator, ph_hass, make_config_entry
+) -> None:
     """Switch platform should no-op when coordinator data is missing."""
     coordinator.data = None
     config_entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "dev1"})
@@ -573,7 +641,9 @@ async def test_switch_async_setup_entry_skips_missing_state(coordinator, ph_hass
 
 
 @pytest.mark.asyncio
-async def test_firewall_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+async def test_firewall_switch_failure_paths(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Firewall switches should handle unavailable data and failed toggles."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -665,8 +735,13 @@ async def test_firewall_switch_failure_paths(monkeypatch, ph_hass, make_config_e
     ],
 )
 async def test_nat_switch_variant_attributes_and_failures(
-    monkeypatch, ph_hass, make_config_entry, rule_key, rule_data, expected_attr
-):
+    monkeypatch: pytest.MonkeyPatch,
+    ph_hass,
+    make_config_entry,
+    rule_key,
+    rule_data,
+    expected_attr,
+) -> None:
     """NAT switch variants should expose their type-specific attributes and failure paths."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -697,7 +772,9 @@ async def test_nat_switch_variant_attributes_and_failures(
 
 
 @pytest.mark.asyncio
-async def test_service_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+async def test_service_switch_failure_paths(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Service switch should ignore missing services and handle failed commands."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -730,7 +807,9 @@ async def test_service_switch_failure_paths(monkeypatch, ph_hass, make_config_en
 
 
 @pytest.mark.asyncio
-async def test_unbound_switch_failure_paths(monkeypatch, ph_hass, make_config_entry):
+async def test_unbound_switch_failure_paths(
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """Unbound switch should handle invalid state and failed commands."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",
@@ -759,8 +838,8 @@ async def test_unbound_switch_failure_paths(monkeypatch, ph_hass, make_config_en
 
 @pytest.mark.asyncio
 async def test_vpn_switch_server_branch_and_failure_paths(
-    monkeypatch, ph_hass, make_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """VPN switch should expose server attributes and handle invalid branches."""
     monkeypatch.setattr(
         "homeassistant.components.opnsense.switch.async_call_later",

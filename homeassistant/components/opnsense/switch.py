@@ -70,8 +70,8 @@ async def _compile_service_switches(
                 coordinator=coordinator,
                 entity_description=SwitchEntityDescription(
                     key=f"service.{service.get('id', service.get('name', 'unknown'))}.{prop_name}",
+                    translation_key="service_status",
                     name=f"Service {service.get('description', service.get('name', 'Unknown'))} {prop_name}",
-                    icon="mdi:application-cog-outline",
                     # entity_category=ENTITY_CATEGORY_CONFIG,
                     device_class=SwitchDeviceClass.SWITCH,
                     entity_registry_enabled_default=False,
@@ -122,8 +122,8 @@ async def _compile_vpn_switches(
                     coordinator=coordinator,
                     entity_description=SwitchEntityDescription(
                         key=f"{vpn_type}.{clients_servers}.{uuid}",
+                        translation_key="vpn_instance",
                         name=f"{'OpenVPN' if vpn_type == 'openvpn' else vpn_type.title()} {clients_servers.title().rstrip('s')} {instance['name']}",
-                        icon="mdi:folder-key-network-outline",
                         # entity_category=ENTITY_CATEGORY_CONFIG,
                         device_class=SwitchDeviceClass.SWITCH,
                         entity_registry_enabled_default=False,
@@ -167,8 +167,8 @@ async def _compile_unbound_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"unbound_blocklist.switch.{uuid}",
+                translation_key="unbound_blocklist",
                 name=f"Unbound Blocklist {dnsbl.get('description', 'Unknown')}",
-                icon="mdi:folder-key-network-outline",
                 # entity_category=ENTITY_CATEGORY_CONFIG,
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
@@ -219,8 +219,8 @@ async def _compile_firewall_rules_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"firewall.rule.{rule.get('uuid', 'unknown')}",
+                translation_key="firewall_rule",
                 name=f"Firewall: {interface}: {rule.get('description', 'unknown')}",
-                icon="mdi:play-network-outline",
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
             ),
@@ -264,8 +264,8 @@ async def _compile_nat_source_rules_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"firewall.nat.source_nat.{rule.get('uuid', 'unknown')}",
+                translation_key="nat_rule",
                 name=f"NAT Source: {rule.get('%interface', '')}: {rule.get('description', 'unknown')}",
-                icon="mdi:network-outline",
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
             ),
@@ -309,8 +309,8 @@ async def _compile_nat_destination_rules_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"firewall.nat.d_nat.{rule.get('uuid', 'unknown')}",
+                translation_key="nat_rule",
                 name=f"NAT Destination: {rule.get('%interface', '')}: {rule.get('description', 'unknown')}",
-                icon="mdi:network-outline",
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
             ),
@@ -354,8 +354,8 @@ async def _compile_nat_one_to_one_rules_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"firewall.nat.one_to_one.{rule.get('uuid', 'unknown')}",
+                translation_key="nat_rule",
                 name=f"NAT One to One: {rule.get('%interface', '')}: {rule.get('description', 'unknown')}",
-                icon="mdi:network-outline",
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
             ),
@@ -399,8 +399,8 @@ async def _compile_nat_npt_rules_switches(
             coordinator=coordinator,
             entity_description=SwitchEntityDescription(
                 key=f"firewall.nat.npt.{rule.get('uuid', 'unknown')}",
+                translation_key="nat_rule",
                 name=f"NAT NPTv6: {rule.get('%interface', '')}: {rule.get('description', 'unknown')}",
-                icon="mdi:network-outline",
                 device_class=SwitchDeviceClass.SWITCH,
                 entity_registry_enabled_default=False,
             ),
@@ -699,13 +699,6 @@ class OPNsenseFirewallRuleSwitch(OPNsenseSwitch):
         else:
             _LOGGER.error("Failed to turn off firewall rule: %s", self.name)
 
-    @property
-    def icon(self) -> str | None:
-        """Return the icon for the entity."""
-        if self.available and self.is_on:
-            return "mdi:play-network"
-        return super().icon
-
 
 class OPNsenseNATRuleSwitch(OPNsenseSwitch):
     """Class for OPNsense NAT Rule Switch entities."""
@@ -905,13 +898,6 @@ class OPNsenseNATRuleSwitch(OPNsenseSwitch):
         else:
             _LOGGER.error("Failed to turn off NAT rule: %s", self.name)
 
-    @property
-    def icon(self) -> str | None:
-        """Return the icon for the entity."""
-        if self.available and self.is_on:
-            return "mdi:network"
-        return super().icon
-
 
 class OPNsenseServiceSwitch(OPNsenseSwitch):
     """Class for OPNsense Service Switch entities."""
@@ -1045,13 +1031,6 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
             self.delay_update = True
         else:
             _LOGGER.error("Failed to turn off service: %s", self.name)
-
-    @property
-    def icon(self) -> str | None:
-        """Return the icon for the entity."""
-        if self.available and self.is_on:
-            return "mdi:application-cog"
-        return super().icon
 
 
 class OPNsenseUnboundBlocklistSwitch(OPNsenseSwitch):
@@ -1290,10 +1269,3 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
             self.delay_update = True
         else:
             _LOGGER.error("Failed to turn off VPN: %s", self.name)
-
-    @property
-    def icon(self) -> str | None:
-        """Return the icon for the entity."""
-        if self.available and self.is_on:
-            return "mdi:folder-key-network"
-        return super().icon

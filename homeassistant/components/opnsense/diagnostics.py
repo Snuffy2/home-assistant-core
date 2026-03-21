@@ -26,10 +26,13 @@ async def async_get_config_entry_diagnostics(
     return async_redact_data(
         {
             "entry": entry.as_dict(),
-            "coordinator": getattr(runtime_data, COORDINATOR).data if runtime_data else None,
+            "coordinator": getattr(runtime_data, COORDINATOR).data
+            if runtime_data
+            else None,
             "device_tracker_coordinator": (
                 getattr(runtime_data, DEVICE_TRACKER_COORDINATOR).data
-                if runtime_data and getattr(runtime_data, DEVICE_TRACKER_COORDINATOR, None)
+                if runtime_data
+                and getattr(runtime_data, DEVICE_TRACKER_COORDINATOR, None)
                 else None
             ),
         },

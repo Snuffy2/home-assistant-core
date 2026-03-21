@@ -48,8 +48,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 entity_description=BinarySensorEntityDescription(
                     key="carp.status",
+                    translation_key="carp_status",
                     name="CARP Status",
-                    icon="mdi:gauge",
                     device_class=None,
                     # entity_category=entity_category,
                     entity_registry_enabled_default=False,
@@ -63,8 +63,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 entity_description=BinarySensorEntityDescription(
                     key="notices.pending_notices_present",
+                    translation_key="pending_notices_present",
                     name="Pending Notices Present",
-                    icon="mdi:alert",
                     device_class=BinarySensorDeviceClass.PROBLEM,
                     # entity_category=entity_category,
                     entity_registry_enabled_default=True,

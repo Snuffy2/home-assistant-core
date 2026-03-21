@@ -13,7 +13,9 @@ from homeassistant.components.opnsense.update import (
 from homeassistant.components.update import UpdateEntityDescription
 
 
-def test_is_update_available_false_when_missing(make_config_entry, dummy_coordinator):
+def test_is_update_available_false_when_missing(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Update entity should be unavailable when coordinator data is missing."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -32,7 +34,9 @@ def test_is_update_available_false_when_missing(make_config_entry, dummy_coordin
     assert ent.available is False
 
 
-def test_is_update_available_false_when_error(make_config_entry, dummy_coordinator):
+def test_is_update_available_false_when_error(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Update entity should be unavailable when coordinator reports an error status."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -50,7 +54,9 @@ def test_is_update_available_false_when_error(make_config_entry, dummy_coordinat
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_respects_sync_option(make_config_entry, dummy_coordinator):
+async def test_async_setup_entry_respects_sync_option(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Update platform setup should add entities only when firmware sync is enabled."""
     entry = make_config_entry(data={CONF_DEVICE_UNIQUE_ID: "id"})
     setattr(entry.runtime_data, update_module.COORDINATOR, dummy_coordinator)
@@ -82,7 +88,9 @@ async def test_async_setup_entry_respects_sync_option(make_config_entry, dummy_c
                         "product_version": "1_0_0",
                         "product_latest": "1_0_0",
                         "product_series": "1.0",
-                        "product_check": {"upgrade_packages": [{"name": "not-opnsense"}]},
+                        "product_check": {
+                            "upgrade_packages": [{"name": "not-opnsense"}]
+                        },
                     },
                     "status": "update",
                 }
@@ -168,7 +176,7 @@ def test_get_versions_scenarios(
     expect_latest_condition,
     make_config_entry,
     dummy_coordinator,
-):
+) -> None:
     """Parameterize _get_versions behaviors across upgrade package presence and missing fields."""
     # Use the shared fixture for a config entry
     entry = make_config_entry()
@@ -200,7 +208,7 @@ def test_get_versions_scenarios(
 )
 def test_get_product_class_and_series_parsing(
     series, expected, make_config_entry, dummy_coordinator
-):
+) -> None:
     """Parameterize product class mapping by series minor version."""
     entry = make_config_entry()
     ent = OPNsenseFirmwareUpdatesAvailableUpdate(
@@ -214,8 +222,8 @@ def test_get_product_class_and_series_parsing(
 
 
 def test_get_product_class_and_installed_version_guard_branches(
-    monkeypatch, make_config_entry, dummy_coordinator
-):
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """Guard branches should return None for malformed firmware metadata."""
     entry = make_config_entry()
     ent = OPNsenseFirmwareUpdatesAvailableUpdate(
@@ -232,7 +240,9 @@ def test_get_product_class_and_installed_version_guard_branches(
     assert ent._get_product_class(None) is None
 
 
-def test_get_versions_updates_to_opnsense_package_version(make_config_entry, dummy_coordinator):
+def test_get_versions_updates_to_opnsense_package_version(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Matching versions should still upgrade to the package-provided OPNsense version."""
     entry = make_config_entry()
     ent = OPNsenseFirmwareUpdatesAvailableUpdate(
@@ -258,7 +268,9 @@ def test_get_versions_updates_to_opnsense_package_version(make_config_entry, dum
     assert ent._get_versions(state) == ("1_0_0", "1_0_1", "1.0")
 
 
-def test_handle_coordinator_update_sets_attributes(make_config_entry, dummy_coordinator):
+def test_handle_coordinator_update_sets_attributes(
+    make_config_entry, dummy_coordinator
+) -> None:
     """_handle_coordinator_update should populate versions and extra attributes."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -304,7 +316,9 @@ def test_handle_coordinator_update_sets_attributes(make_config_entry, dummy_coor
     assert ent.extra_state_attributes.get("opnsense_last_check") == 1
 
 
-def test_handle_coordinator_update_upgrade_sets_release_url(make_config_entry, dummy_coordinator):
+def test_handle_coordinator_update_upgrade_sets_release_url(
+    make_config_entry, dummy_coordinator
+) -> None:
     """Upgrade state should compute a release URL and provide release notes.
 
     This also asserts normalization of product_latest and correct derivation of
@@ -351,8 +365,11 @@ def test_handle_coordinator_update_upgrade_sets_release_url(make_config_entry, d
     [("2_0_1", "2.0.1"), ("2.0.1", "2.0.1")],
 )
 async def test_handle_coordinator_update_update_normalizes_product_latest(
-    product_latest_input, expected_latest_normalized, make_config_entry, dummy_coordinator
-):
+    product_latest_input,
+    expected_latest_normalized,
+    make_config_entry,
+    dummy_coordinator,
+) -> None:
     """When status is 'update', product_latest should be normalized (underscores -> dots)."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -392,8 +409,8 @@ async def test_handle_coordinator_update_update_normalizes_product_latest(
 
 
 def test_handle_coordinator_update_release_url_fallback_when_product_class_none(
-    monkeypatch, make_config_entry, dummy_coordinator
-):
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """When _get_product_class returns None, release_url should fall back to the OPNsense UI changelog."""
     # ensure config entry has a base url for the fallback and a device id
     entry = make_config_entry(
@@ -437,7 +454,7 @@ def test_handle_coordinator_update_release_url_fallback_when_product_class_none(
 
 def test_handle_coordinator_update_upgrade_sets_business_release_url(
     make_config_entry, dummy_coordinator
-):
+) -> None:
     """Business product series should generate business release URL."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -512,8 +529,14 @@ def test_handle_coordinator_update_upgrade_sets_business_release_url(
     ],
 )
 def test_get_release_notes_variants(
-    state, latest, product_version, expect_exact, expected, make_config_entry, dummy_coordinator
-):
+    state,
+    latest,
+    product_version,
+    expect_exact,
+    expected,
+    make_config_entry,
+    dummy_coordinator,
+) -> None:
     """Parameterize release-notes generation for update/upgrade/default paths."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -536,7 +559,9 @@ def test_get_release_notes_variants(
 
 
 @pytest.mark.asyncio
-async def test_async_install_reboots_when_needed(monkeypatch, make_config_entry, dummy_coordinator):
+async def test_async_install_reboots_when_needed(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """async_install should trigger a reboot when the update requires it."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -550,7 +575,7 @@ async def test_async_install_reboots_when_needed(monkeypatch, make_config_entry,
     ent.async_write_ha_state = lambda: None
 
     class FakeClient:
-        def __init__(self):
+        def __init__(self) -> None:
             # planned sequence: first 'running', then 'done'
             self._status_calls = [
                 {"status": "running"},
@@ -596,7 +621,7 @@ async def test_async_install_reboots_when_needed(monkeypatch, make_config_entry,
 @pytest.mark.asyncio
 async def test_async_install_does_nothing_on_non_update_status(
     make_config_entry, dummy_coordinator
-):
+) -> None:
     """async_install should early-return and not call upgrade_firmware when status is not update/upgrade."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -624,8 +649,8 @@ async def test_async_install_does_nothing_on_non_update_status(
 
 @pytest.mark.asyncio
 async def test_async_install_early_returns_and_no_client(
-    monkeypatch, make_config_entry, dummy_coordinator
-):
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """async_install should return early when there's no client available."""
     entry = make_config_entry()
     coord = dummy_coordinator
@@ -648,7 +673,9 @@ async def test_async_install_early_returns_and_no_client(
     await ent.async_install()
 
 
-def test_get_versions_exception_path(monkeypatch, make_config_entry, dummy_coordinator):
+def test_get_versions_exception_path(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """_get_versions returns None tuple when underlying dict_get raises."""
 
     # force dict_get to raise so we hit the exception return
@@ -670,7 +697,9 @@ def test_get_versions_exception_path(monkeypatch, make_config_entry, dummy_coord
     assert pv is None and pl is None and ps is None
 
 
-def test_get_release_notes_exception_path(monkeypatch, make_config_entry, dummy_coordinator):
+def test_get_release_notes_exception_path(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """_get_release_notes returns an unavailable message when dict_get raises."""
 
     entry = make_config_entry()
@@ -691,7 +720,9 @@ def test_get_release_notes_exception_path(monkeypatch, make_config_entry, dummy_
 
 
 @pytest.mark.asyncio
-async def test_async_install_exceptions_loop(monkeypatch, make_config_entry, dummy_coordinator):
+async def test_async_install_exceptions_loop(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, dummy_coordinator
+) -> None:
     """async_install should handle exceptions and exit the install loop gracefully."""
     entry = make_config_entry()
     ent = OPNsenseFirmwareUpdatesAvailableUpdate(
@@ -703,7 +734,7 @@ async def test_async_install_exceptions_loop(monkeypatch, make_config_entry, dum
     )
 
     class BadClient:
-        def __init__(self):
+        def __init__(self) -> None:
             self.rebooted = False
 
         async def upgrade_firmware(self, upgrade_type):
@@ -727,7 +758,9 @@ async def test_async_install_exceptions_loop(monkeypatch, make_config_entry, dum
     assert bad.rebooted is False
 
 
-def test_get_installed_version_none_on_error(make_config_entry, dummy_coordinator):
+def test_get_installed_version_none_on_error(
+    make_config_entry, dummy_coordinator
+) -> None:
     """_get_installed_version returns None on malformed or missing state."""
 
     entry = make_config_entry()
@@ -742,7 +775,9 @@ def test_get_installed_version_none_on_error(make_config_entry, dummy_coordinato
 
 
 @pytest.mark.asyncio
-async def test_async_release_notes_returns_value(make_config_entry, dummy_coordinator):
+async def test_async_release_notes_returns_value(
+    make_config_entry, dummy_coordinator
+) -> None:
     """async_release_notes returns generated release notes when state present."""
 
     entry = make_config_entry()

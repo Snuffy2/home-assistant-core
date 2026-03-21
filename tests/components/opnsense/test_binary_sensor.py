@@ -24,7 +24,9 @@ from homeassistant.components.opnsense.coordinator import OPNsenseDataUpdateCoor
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_creates_entities_when_enabled(make_config_entry):
+async def test_async_setup_entry_creates_entities_when_enabled(
+    make_config_entry,
+) -> None:
     """Create entities when sync options are enabled."""
     # enable both sync options
     entry = make_config_entry(
@@ -43,11 +45,13 @@ async def test_async_setup_entry_creates_entities_when_enabled(make_config_entry
     # expect two entities created
     assert len(created) == 2
     assert any(isinstance(e, OPNsenseCarpStatusBinarySensor) for e in created)
-    assert any(isinstance(e, OPNsensePendingNoticesPresentBinarySensor) for e in created)
+    assert any(
+        isinstance(e, OPNsensePendingNoticesPresentBinarySensor) for e in created
+    )
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_skips_when_disabled(make_config_entry):
+async def test_async_setup_entry_skips_when_disabled(make_config_entry) -> None:
     """Skip creating entities when sync options are disabled."""
     # explicitly disable both
     entry = make_config_entry(
@@ -67,7 +71,9 @@ async def test_async_setup_entry_skips_when_disabled(make_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_creates_only_carp_when_carp_enabled(make_config_entry):
+async def test_async_setup_entry_creates_only_carp_when_carp_enabled(
+    make_config_entry,
+) -> None:
     """Create only CARP entity when CARP sync is enabled."""
     # enable only CARP
     entry = make_config_entry(
@@ -89,7 +95,9 @@ async def test_async_setup_entry_creates_only_carp_when_carp_enabled(make_config
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_creates_only_notices_when_notices_enabled(make_config_entry):
+async def test_async_setup_entry_creates_only_notices_when_notices_enabled(
+    make_config_entry,
+) -> None:
     """Create only Notices entity when notices sync is enabled."""
     # enable only Notices
     entry = make_config_entry(
@@ -111,7 +119,13 @@ async def test_async_setup_entry_creates_only_notices_when_notices_enabled(make_
 
 
 @pytest.mark.parametrize(
-    ("coord_data", "expect_write_called", "expect_available", "expect_is_on", "expect_extra"),
+    (
+        "coord_data",
+        "expect_write_called",
+        "expect_available",
+        "expect_is_on",
+        "expect_extra",
+    ),
     [
         (None, True, False, None, None),
         ({"carp_status": True}, True, True, True, dict),
@@ -122,8 +136,13 @@ async def test_async_setup_entry_creates_only_notices_when_notices_enabled(make_
     ],
 )
 def test_carp_sensor_update_paths_param(
-    coord_data, expect_write_called, expect_available, expect_is_on, expect_extra, make_config_entry
-):
+    coord_data,
+    expect_write_called,
+    expect_available,
+    expect_is_on,
+    expect_extra,
+    make_config_entry,
+) -> None:
     """Parameterized tests for CARP status sensor update paths.
 
     Covers: non-mapping (None), present True, and missing-key cases.
@@ -159,11 +178,22 @@ def test_carp_sensor_update_paths_param(
 
 
 @pytest.mark.parametrize(
-    ("coord_data", "expect_write_called", "expect_available", "expect_is_on", "expect_pending"),
+    (
+        "coord_data",
+        "expect_write_called",
+        "expect_available",
+        "expect_is_on",
+        "expect_pending",
+    ),
     [
         (None, True, False, None, None),
         (
-            {"notices": {"pending_notices_present": True, "pending_notices": [{"id": 1}]}},
+            {
+                "notices": {
+                    "pending_notices_present": True,
+                    "pending_notices": [{"id": 1}],
+                }
+            },
             True,
             True,
             True,
@@ -186,7 +216,7 @@ def test_pending_notices_sensor_update_paths_param(
     expect_is_on,
     expect_pending,
     make_config_entry,
-):
+) -> None:
     """Parameterized tests for pending notices sensor update paths.
 
     Covers: non-mapping (None), present with list, and present but missing list.
@@ -220,7 +250,7 @@ def test_pending_notices_sensor_update_paths_param(
         assert s.extra_state_attributes.get("pending_notices") == expect_pending
 
 
-def test_pending_notices_sensor_guard_branches(make_config_entry):
+def test_pending_notices_sensor_guard_branches(make_config_entry) -> None:
     """Pending notices sensor should handle non-mapping and malformed notices payloads."""
     entry = make_config_entry()
     desc = BinarySensorEntityDescription(
