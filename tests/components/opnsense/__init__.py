@@ -1,1 +1,1 @@
-"""pytest for Home Assistant hass-opnsense integration."""
+"""pytest for Home Assistant the OPNsense integration integration."""

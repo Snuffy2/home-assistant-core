@@ -1,4 +1,4 @@
-"""Unit tests for the services module of the hass-opnsense integration.
+"""Unit tests for the services module of the the OPNsense integration integration.
 
 These tests exercise service helpers, validation paths, and error handling
 for operations such as starting/stopping services and generating vouchers.
@@ -17,7 +17,9 @@ from homeassistant.exceptions import ServiceValidationError
 
 
 @pytest.mark.asyncio
-async def test_async_setup_services_registers_get_vnstat_metrics_case_insensitive_period():
+async def test_async_setup_services_registers_get_vnstat_metrics_case_insensitive_period() -> (
+    None
+):
     """Service setup should register get_vnstat_metrics with normalized period schema."""
     hass = MagicMock(spec=HomeAssistant)
     hass.services = MagicMock()
@@ -44,7 +46,9 @@ async def test_async_setup_services_registers_get_vnstat_metrics_case_insensitiv
 
 
 @pytest.mark.asyncio
-async def test_get_clients_single_and_multiple(monkeypatch):
+async def test_get_clients_single_and_multiple(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """_get_clients returns clients from hass.data and supports filtering."""
     # use a plain hass-like object so .data is a real dict
     hass_local = MagicMock(spec=HomeAssistant)
@@ -82,7 +86,9 @@ async def test_get_clients_single_and_multiple(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_clients_registry_errors_are_ignored(monkeypatch):
+async def test_get_clients_registry_errors_are_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify that _get_clients returns all configured clients even when registry lookups raise exceptions.
 
     Device or entity registry lookups may raise exceptions; ensure these are ignored.
@@ -99,12 +105,16 @@ async def test_get_clients_registry_errors_are_ignored(monkeypatch):
 
     monkeypatch.setattr(services_mod.dr, "async_get", _raises(TypeError()))
     monkeypatch.setattr(services_mod.er, "async_get", _raises(AttributeError()))
-    res = await services_mod._get_clients(hass_local, opndevice_id="d", opnentity_id="e")
+    res = await services_mod._get_clients(
+        hass_local, opndevice_id="d", opnentity_id="e"
+    )
     assert res == [c1, c2]
 
 
 @pytest.mark.asyncio
-async def test_service_start_stop_restart_success_and_failure(monkeypatch, ph_hass):
+async def test_service_start_stop_restart_success_and_failure(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """Start/stop/restart service handlers call client methods correctly."""
     hass = ph_hass
     hass.data = {}
@@ -170,7 +180,9 @@ async def test_service_start_stop_restart_success_and_failure(monkeypatch, ph_ha
 
 
 @pytest.mark.asyncio
-async def test_service_restart_only_if_running_and_reload_interface(monkeypatch, ph_hass):
+async def test_service_restart_only_if_running_and_reload_interface(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """Restart service honors only_if_running and reload_interface behavior."""
     c1 = MagicMock()
     c1.name = "c1"
@@ -227,8 +239,11 @@ async def test_service_restart_only_if_running_and_reload_interface(monkeypatch,
     ],
 )
 async def test_service_start_stop_restart_failure_variants(
-    monkeypatch, ph_hass, method_name, method_attr
-):
+    monkeypatch: pytest.MonkeyPatch,
+    ph_hass,
+    method_name: str,
+    method_attr: str,
+) -> None:
     """Parameterized failure tests for start/stop/restart service handlers.
 
     For each handler, ensure that if any client returns False the handler
@@ -258,7 +273,9 @@ async def test_service_start_stop_restart_failure_variants(
 
 
 @pytest.mark.asyncio
-async def test_generate_vouchers_success_and_server_error(monkeypatch, ph_hass):
+async def test_generate_vouchers_success_and_server_error(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """Generating vouchers returns assembled list and handles server errors."""
     hass = ph_hass
     hass.data = {}
@@ -287,7 +304,9 @@ async def test_generate_vouchers_success_and_server_error(monkeypatch, ph_hass):
 
 
 @pytest.mark.asyncio
-async def test_kill_states_success_and_failure(monkeypatch, ph_hass):
+async def test_kill_states_success_and_failure(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """Killing states returns dropped state counts and handles failures."""
     hass = ph_hass
     hass.data = {}
@@ -314,14 +333,20 @@ async def test_kill_states_success_and_failure(monkeypatch, ph_hass):
 
 
 @pytest.mark.asyncio
-async def test_run_speedtest_success_and_unavailable(monkeypatch, ph_hass):
+async def test_run_speedtest_success_and_unavailable(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """run_speedtest should return per-client results and raise when unavailable."""
     hass = ph_hass
     hass.data = {}
     c1 = MagicMock()
     c1.name = "c1"
     c1.run_speedtest = AsyncMock(
-        return_value={"timestamp": "2026-03-14T03:09:45Z", "download": 836.05, "upload": 832.97}
+        return_value={
+            "timestamp": "2026-03-14T03:09:45Z",
+            "download": 836.05,
+            "upload": 832.97,
+        }
     )
     c2 = MagicMock()
     c2.name = "c2"
@@ -347,7 +372,9 @@ async def test_run_speedtest_success_and_unavailable(monkeypatch, ph_hass):
 
 
 @pytest.mark.asyncio
-async def test_get_vnstat_metrics_success_and_unavailable(monkeypatch, ph_hass):
+async def test_get_vnstat_metrics_success_and_unavailable(
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """get_vnstat_metrics should return parsed per-client data or raise when unavailable."""
     hass = ph_hass
     hass.data = {}
@@ -357,7 +384,9 @@ async def test_get_vnstat_metrics_success_and_unavailable(monkeypatch, ph_hass):
         return_value={
             "period": "yearly",
             "interfaces": {
-                "igc0": [{"label": "2026", "rx_bytes": 1, "tx_bytes": 2, "total_bytes": 3}],
+                "igc0": [
+                    {"label": "2026", "rx_bytes": 1, "tx_bytes": 2, "total_bytes": 3}
+                ],
             },
         }
     )
@@ -387,7 +416,7 @@ async def test_get_vnstat_metrics_success_and_unavailable(monkeypatch, ph_hass):
 
 
 @pytest.mark.asyncio
-async def test_get_clients_no_data_returns_empty():
+async def test_get_clients_no_data_returns_empty() -> None:
     """_get_clients returns an empty list when hass.data has no domain."""
     hass = MagicMock(spec=HomeAssistant)
     hass.data = {}
@@ -396,7 +425,7 @@ async def test_get_clients_no_data_returns_empty():
 
 
 @pytest.fixture
-def fake_get_empty(monkeypatch):
+def fake_get_empty(monkeypatch: pytest.MonkeyPatch):
     """Fixture that monkeypatches services_mod._get_clients to return an empty list."""
 
     async def _fake_get_empty(*args, **kwargs):
@@ -407,7 +436,7 @@ def fake_get_empty(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_restart_service_no_clients_raises(ph_hass, fake_get_empty):
+async def test_restart_service_no_clients_raises(ph_hass, fake_get_empty) -> None:
     """If no clients are found, restarting a service should raise ServiceValidationError."""
     hass = ph_hass
     hass.data = {}
@@ -420,7 +449,7 @@ async def test_restart_service_no_clients_raises(ph_hass, fake_get_empty):
 
 
 @pytest.mark.asyncio
-async def test_start_service_no_clients_raises(ph_hass, fake_get_empty):
+async def test_start_service_no_clients_raises(ph_hass, fake_get_empty) -> None:
     """If no clients are found, starting a service should raise ServiceValidationError."""
     hass = ph_hass
     hass.data = {}
@@ -433,7 +462,7 @@ async def test_start_service_no_clients_raises(ph_hass, fake_get_empty):
 
 
 @pytest.mark.asyncio
-async def test_stop_service_no_clients_raises(ph_hass, fake_get_empty):
+async def test_stop_service_no_clients_raises(ph_hass, fake_get_empty) -> None:
     """If no clients are found, stopping a service should raise ServiceValidationError."""
     hass = ph_hass
     hass.data = {}
@@ -446,7 +475,9 @@ async def test_stop_service_no_clients_raises(ph_hass, fake_get_empty):
 
 
 @pytest.mark.asyncio
-async def test_close_send_wol_and_system_calls(monkeypatch):
+async def test_close_send_wol_and_system_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Close/send_wol/system calls are forwarded to clients."""
     # single client that should receive calls
     c = MagicMock()
@@ -486,7 +517,9 @@ async def test_close_send_wol_and_system_calls(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_toggle_alias_success_and_failure(monkeypatch):
+async def test_toggle_alias_success_and_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Toggle alias success and failure paths raise or not appropriately."""
     # success path
     c1 = MagicMock()

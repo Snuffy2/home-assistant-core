@@ -1,4 +1,4 @@
-"""Unit tests for the config flow and options flow of the hass-opnsense integration.
+"""Unit tests for the config flow and options flow of the the OPNsense integration integration.
 
 Tests include URL parsing/validation, exception mapping for user input,
 and options flow behaviors such as device tracker handling.
@@ -14,7 +14,7 @@ from yarl import URL
 cf_mod = importlib.import_module("homeassistant.components.opnsense.config_flow")
 
 
-def test_mac_and_ip_and_cleanse():
+def test_mac_and_ip_and_cleanse() -> None:
     """Validate MAC/IP helpers and cleanse sensitive data."""
     assert cf_mod.is_valid_mac_address("aa:bb:cc:dd:ee:ff")
     assert cf_mod.is_valid_mac_address("AA-BB-CC-DD-EE-FF")
@@ -32,20 +32,22 @@ def test_mac_and_ip_and_cleanse():
     assert "secret" not in out
 
 
-def test_device_tracking_mode_helper():
+def test_device_tracking_mode_helper() -> None:
     """Map stored devices to the expected UI tracking mode."""
     assert (
         cf_mod._get_device_tracking_mode(False, ["aa:bb:cc:dd:ee:ff"])
         == cf_mod.DEVICE_TRACKING_MODE_DISABLED
     )
     assert cf_mod._get_device_tracking_mode(True, []) == cf_mod.DEVICE_TRACKING_MODE_ALL
-    assert cf_mod._get_device_tracking_mode(True, None) == cf_mod.DEVICE_TRACKING_MODE_ALL
+    assert (
+        cf_mod._get_device_tracking_mode(True, None) == cf_mod.DEVICE_TRACKING_MODE_ALL
+    )
     assert cf_mod._get_device_tracking_mode(True, ["aa:bb:cc:dd:ee:ff"]) == (
         cf_mod.DEVICE_TRACKING_MODE_SELECTED
     )
 
 
-def test_parse_and_merge_manual_devices():
+def test_parse_and_merge_manual_devices() -> None:
     """Parse mixed separators and deduplicate MAC addresses in order."""
     parsed = cf_mod._parse_manual_devices(
         "AA-BB-CC-DD-EE-FF,\n11:22:33:44:55:66\ninvalid\naa:bb:cc:dd:ee:ff"
@@ -64,7 +66,7 @@ def test_parse_and_merge_manual_devices():
     ]
 
 
-def test_device_entry_sort_key_numeric_ip_sorting():
+def test_device_entry_sort_key_numeric_ip_sorting() -> None:
     """Sort key should use numeric IP ordering when an IP is available."""
     ip_by_mac = {
         "aa:bb:cc:dd:ee:ff": "10.0.0.5",
@@ -98,7 +100,7 @@ def test_device_entry_sort_key_numeric_ip_sorting():
 
 
 @pytest.mark.asyncio
-async def test_clean_and_parse_url_success_and_failure():
+async def test_clean_and_parse_url_success_and_failure() -> None:
     """Clean and parse URL, fix missing scheme and handle invalid URL."""
     ui = {cf_mod.CONF_URL: "router.example"}
     await cf_mod._clean_and_parse_url(ui)
@@ -131,7 +133,9 @@ async def test_clean_and_parse_url_success_and_failure():
         ("os_unknown", "unknown"),
     ],
 )
-async def test_validate_input_exception_mapping(monkeypatch, exc_key, expected):
+async def test_validate_input_exception_mapping(
+    monkeypatch: pytest.MonkeyPatch, exc_key: str, expected: str
+) -> None:
     """Ensure validate_input maps various exceptions to the expected error code."""
 
     # Build exception object lazily to avoid constructor issues at collection time
@@ -161,7 +165,9 @@ async def test_validate_input_exception_mapping(monkeypatch, exc_key, expected):
         class RI:
             real_url = URL("http://localhost")
 
-        exc = aiohttp.ClientResponseError(request_info=RI(), history=(), status=status, message="m")
+        exc = aiohttp.ClientResponseError(
+            request_info=RI(), history=(), status=status, message="m"
+        )
     elif exc_key == "protocol_307":
         exc = aiohttp.RedirectClientError("307 Temporary Redirect")
     elif exc_key == "too_many_redirects":
@@ -195,7 +201,9 @@ async def test_validate_input_exception_mapping(monkeypatch, exc_key, expected):
 
 
 @pytest.mark.asyncio
-async def test_validate_input_client_error_maps_to_cannot_connect(monkeypatch):
+async def test_validate_input_client_error_maps_to_cannot_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Generic aiohttp and socket errors should map to cannot_connect."""
 
     async def _raise_client_error(*args, **kwargs):
@@ -217,14 +225,14 @@ async def test_validate_input_client_error_maps_to_cannot_connect(monkeypatch):
     assert errors["base"] == "cannot_connect"
 
 
-def test_validate_firmware_version_raises():
+def test_validate_firmware_version_raises() -> None:
     """_validate_firmware_version should raise BelowMinFirmware for old versions."""
     # pick an obviously old version
     with pytest.raises(cf_mod.BelowMinFirmware):
         cf_mod._validate_firmware_version("1.0")
 
 
-def test_log_and_set_error_sets_base(caplog):
+def test_log_and_set_error_sets_base(caplog: pytest.LogCaptureFixture) -> None:
     """_log_and_set_error should log the message and set errors['base']."""
     errors = {}
     cf_mod._log_and_set_error(errors=errors, key="test_key", message="an msg")
@@ -233,7 +241,9 @@ def test_log_and_set_error_sets_base(caplog):
 
 
 @pytest.mark.asyncio
-async def test_get_dt_entries_sorts_and_includes_selected(monkeypatch, fake_client):
+async def test_get_dt_entries_sorts_and_includes_selected(
+    monkeypatch: pytest.MonkeyPatch, fake_client
+) -> None:
     """Ensure _get_dt_entries returns selected devices first and ARP entries sorted by IP."""
 
     # Create a client class via fixture and attach a get_arp_table implementation
@@ -254,12 +264,20 @@ async def test_get_dt_entries_sorts_and_includes_selected(monkeypatch, fake_clie
     def _fake_create_clientsession(*args, **kwargs):
         return MagicMock()
 
-    monkeypatch.setattr(cf_mod, "async_create_clientsession", _fake_create_clientsession)
+    monkeypatch.setattr(
+        cf_mod, "async_create_clientsession", _fake_create_clientsession
+    )
 
     hass = MagicMock()
-    config = {cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"}
+    config = {
+        cf_mod.CONF_URL: "https://x",
+        cf_mod.CONF_USERNAME: "u",
+        cf_mod.CONF_PASSWORD: "p",
+    }
     selected = ["aa:bb:cc:00:00:01"]
-    res = await cf_mod._get_dt_entries(hass=hass, config=config, selected_devices=selected)
+    res = await cf_mod._get_dt_entries(
+        hass=hass, config=config, selected_devices=selected
+    )
 
     # ensure selected device is present and IP-based entries are present
     keys = list(res.keys())
@@ -279,7 +297,9 @@ async def test_get_dt_entries_sorts_and_includes_selected(monkeypatch, fake_clie
 
 
 @pytest.mark.asyncio
-async def test_get_dt_entries_preserves_missing_selected_devices(monkeypatch, fake_client):
+async def test_get_dt_entries_preserves_missing_selected_devices(
+    monkeypatch: pytest.MonkeyPatch, fake_client
+) -> None:
     """Selected MACs missing from ARP stay available with a fallback label."""
 
     client_cls = fake_client()
@@ -289,25 +309,35 @@ async def test_get_dt_entries_preserves_missing_selected_devices(monkeypatch, fa
 
     setattr(client_cls, "get_arp_table", _get_arp_table)
     monkeypatch.setattr(cf_mod, "OPNsenseClient", client_cls)
-    monkeypatch.setattr(cf_mod, "async_create_clientsession", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(
+        cf_mod, "async_create_clientsession", lambda *a, **k: MagicMock()
+    )
 
     res = await cf_mod._get_dt_entries(
         hass=MagicMock(),
-        config={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        config={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+        },
         selected_devices=["AA-BB-CC-DD-EE-FF"],
     )
     assert res["aa:bb:cc:dd:ee:ff"] == "Not currently detected [aa:bb:cc:dd:ee:ff]"
 
 
-def test_config_flow_helper_guard_branches(monkeypatch):
+def test_config_flow_helper_guard_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Cover MAC parsing and device-label fallback branches."""
     assert cf_mod.normalize_mac_address(123) is None
     assert cf_mod._parse_manual_devices(None) == []
-    assert cf_mod._build_selected_device_entries(["not-a-mac", "AA-BB-CC-DD-EE-FF"]) == {
-        "aa:bb:cc:dd:ee:ff": "Not currently detected [aa:bb:cc:dd:ee:ff]"
-    }
+    assert cf_mod._build_selected_device_entries(
+        ["not-a-mac", "AA-BB-CC-DD-EE-FF"]
+    ) == {"aa:bb:cc:dd:ee:ff": "Not currently detected [aa:bb:cc:dd:ee:ff]"}
     assert (
-        cf_mod._format_detected_device_label({"mac": "AA-BB-CC-DD-EE-FF", "hostname": ""})
+        cf_mod._format_detected_device_label(
+            {"mac": "AA-BB-CC-DD-EE-FF", "hostname": ""}
+        )
         == "aa:bb:cc:dd:ee:ff [aa:bb:cc:dd:ee:ff]"
     )
     assert (
@@ -321,11 +351,13 @@ def test_config_flow_helper_guard_branches(monkeypatch):
         == "192.168.1.10 [Netgate | aa:bb:cc:dd:ee:ff]"
     )
 
-    monkeypatch.setattr(cf_mod.re, "split", lambda *args, **kwargs: [123, "AA-BB-CC-DD-EE-FF"])
+    monkeypatch.setattr(
+        cf_mod.re, "split", lambda *args, **kwargs: [123, "AA-BB-CC-DD-EE-FF"]
+    )
     assert cf_mod._parse_manual_devices("ignored") == ["aa:bb:cc:dd:ee:ff"]
 
 
-def test_build_user_input_and_granular_and_options_schemas_defaults():
+def test_build_user_input_and_granular_and_options_schemas_defaults() -> None:
     """Verify the schema builders accept empty input and return defaults where applicable."""
     uis = None
     # user input schema should provide keys and defaults
@@ -355,7 +387,7 @@ def test_build_user_input_and_granular_and_options_schemas_defaults():
         (1000, 300),  # above maximum -> clamped to 300
     ],
 )
-def test_options_scan_interval_clamp(input_value, expected):
+def test_options_scan_interval_clamp(input_value: int, expected: int) -> None:
     """_build_options_init_schema should clamp CONF_SCAN_INTERVAL to min/max values."""
     oschema = cf_mod._build_options_init_schema(user_input=None)
     # pass a dict with the scan interval set to the test value
@@ -373,7 +405,9 @@ def test_options_scan_interval_clamp(input_value, expected):
         (5000, 3600),  # above maximum -> clamped to 3600
     ],
 )
-def test_options_device_tracker_consider_home_clamp(input_value, expected):
+def test_options_device_tracker_consider_home_clamp(
+    input_value: int, expected: int
+) -> None:
     """_build_options_init_schema should clamp CONF_DEVICE_TRACKER_CONSIDER_HOME to min/max values."""
     oschema = cf_mod._build_options_init_schema(user_input=None)
     # pass a dict with the consider_home value set to the test value
@@ -381,7 +415,7 @@ def test_options_device_tracker_consider_home_clamp(input_value, expected):
     assert validated.get(cf_mod.CONF_DEVICE_TRACKER_CONSIDER_HOME) == expected
 
 
-def test_async_get_options_flow_returns_options_flow():
+def test_async_get_options_flow_returns_options_flow() -> None:
     """async_get_options_flow should return an OPNsenseOptionsFlow instance."""
     cfg = MagicMock()
     res = cf_mod.OPNsenseConfigFlow.async_get_options_flow(cfg)
@@ -389,10 +423,14 @@ def test_async_get_options_flow_returns_options_flow():
 
 
 @pytest.mark.asyncio
-async def test_options_flow_init_with_user_triggers_update():
+async def test_options_flow_init_with_user_triggers_update() -> None:
     """Submitting user input to async_step_init should update entry and create entry."""
     cfg = MagicMock()
-    cfg.data = {cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"}
+    cfg.data = {
+        cf_mod.CONF_URL: "https://x",
+        cf_mod.CONF_USERNAME: "u",
+        cf_mod.CONF_PASSWORD: "p",
+    }
     cfg.options = {cf_mod.CONF_DEVICE_TRACKER_ENABLED: False}
 
     flow = cf_mod.OPNsenseOptionsFlow(cfg)
@@ -418,10 +456,16 @@ async def test_options_flow_init_with_user_triggers_update():
 
 
 @pytest.mark.asyncio
-async def test_options_flow_granular_sync_calls_validate_and_updates(monkeypatch):
+async def test_options_flow_granular_sync_calls_validate_and_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """async_step_granular_sync should call validate_input and update entry when no errors."""
     cfg = MagicMock()
-    cfg.data = {cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"}
+    cfg.data = {
+        cf_mod.CONF_URL: "https://x",
+        cf_mod.CONF_USERNAME: "u",
+        cf_mod.CONF_PASSWORD: "p",
+    }
     cfg.options = {cf_mod.CONF_DEVICE_TRACKER_ENABLED: False}
 
     flow = cf_mod.OPNsenseOptionsFlow(cfg)
@@ -451,12 +495,16 @@ async def test_options_flow_granular_sync_calls_validate_and_updates(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_async_step_import_preserves_import_options(monkeypatch):
+async def test_async_step_import_preserves_import_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """YAML import should create a config entry with the supplied options payload."""
     flow = cf_mod.OPNsenseConfigFlow()
     flow.hass = MagicMock()
 
-    async def _fake_validate_input(hass, user_input, config_step, errors, expected_id=None):
+    async def _fake_validate_input(
+        hass, user_input, config_step, errors, expected_id=None
+    ):
         return {}
 
     async def _noop_unique_id(*args, **kwargs):
@@ -486,7 +534,9 @@ async def test_async_step_import_preserves_import_options(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_user_input_unknown_firmware_and_missing_device_id(monkeypatch):
+async def test_handle_user_input_unknown_firmware_and_missing_device_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """_handle_user_input should translate firmware parse failures and missing ids."""
 
     fake_client = MagicMock()
@@ -500,7 +550,9 @@ async def test_handle_user_input_unknown_firmware_and_missing_device_id(monkeypa
 
     monkeypatch.setattr(cf_mod, "_clean_and_parse_url", _fake_clean)
     monkeypatch.setattr(cf_mod, "_get_client", AsyncMock(return_value=fake_client))
-    monkeypatch.setattr(cf_mod, "_validate_firmware_version", MagicMock(side_effect=ValueError))
+    monkeypatch.setattr(
+        cf_mod, "_validate_firmware_version", MagicMock(side_effect=ValueError)
+    )
 
     with pytest.raises(cf_mod.UnknownFirmware):
         await cf_mod._handle_user_input(
@@ -529,7 +581,9 @@ async def test_handle_user_input_unknown_firmware_and_missing_device_id(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_get_dt_entries_skips_empty_mac_and_handles_empty_arp(monkeypatch, fake_client):
+async def test_get_dt_entries_skips_empty_mac_and_handles_empty_arp(
+    monkeypatch: pytest.MonkeyPatch, fake_client
+) -> None:
     """_get_dt_entries should skip empty MACs and return selected entries when ARP is empty."""
     client_cls = fake_client()
 
@@ -538,11 +592,17 @@ async def test_get_dt_entries_skips_empty_mac_and_handles_empty_arp(monkeypatch,
 
     setattr(client_cls, "get_arp_table", _get_arp_table_empty_mac)
     monkeypatch.setattr(cf_mod, "OPNsenseClient", client_cls)
-    monkeypatch.setattr(cf_mod, "async_create_clientsession", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(
+        cf_mod, "async_create_clientsession", lambda *a, **k: MagicMock()
+    )
 
     result = await cf_mod._get_dt_entries(
         hass=MagicMock(),
-        config={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        config={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+        },
         selected_devices=[],
     )
     assert list(result) == ["aa:bb:cc:dd:ee:ff"]
@@ -553,19 +613,27 @@ async def test_get_dt_entries_skips_empty_mac_and_handles_empty_arp(monkeypatch,
     setattr(client_cls, "get_arp_table", _get_arp_table_empty)
     result = await cf_mod._get_dt_entries(
         hass=MagicMock(),
-        config={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        config={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+        },
         selected_devices=["AA-BB-CC-DD-EE-FF"],
     )
     assert result == {"aa:bb:cc:dd:ee:ff": "Not currently detected [aa:bb:cc:dd:ee:ff]"}
 
 
 @pytest.mark.asyncio
-async def test_async_step_reauth_confirm_updates_existing_entry(monkeypatch):
+async def test_async_step_reauth_confirm_updates_existing_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Reauth should validate new credentials and request a reload of the existing entry."""
     flow = cf_mod.OPNsenseConfigFlow()
     flow.hass = MagicMock()
 
-    async def _fake_validate_input(hass, user_input, config_step, errors, expected_id=None):
+    async def _fake_validate_input(
+        hass, user_input, config_step, errors, expected_id=None
+    ):
         return {}
 
     reauth_entry = MagicMock()
@@ -595,13 +663,18 @@ async def test_async_step_reauth_confirm_updates_existing_entry(monkeypatch):
     assert result == expected_result
     flow.async_update_reload_and_abort.assert_called_once()
     assert flow.async_update_reload_and_abort.call_args.kwargs["entry"] is reauth_entry
-    assert flow.async_update_reload_and_abort.call_args.kwargs["data_updates"][
-        cf_mod.CONF_USERNAME
-    ] == "new-user"
+    assert (
+        flow.async_update_reload_and_abort.call_args.kwargs["data_updates"][
+            cf_mod.CONF_USERNAME
+        ]
+        == "new-user"
+    )
 
 
 @pytest.mark.asyncio
-async def test_async_step_user_and_reconfigure_show_forms(make_config_entry):
+async def test_async_step_user_and_reconfigure_show_forms(
+    make_config_entry,
+) -> None:
     """Initial and reconfigure steps should render forms before submission."""
     flow = cf_mod.OPNsenseConfigFlow()
     flow.hass = MagicMock()
@@ -627,12 +700,16 @@ async def test_async_step_user_and_reconfigure_show_forms(make_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_step_reconfigure_updates_existing_entry(monkeypatch, make_config_entry):
+async def test_async_step_reconfigure_updates_existing_entry(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """Reconfigure should validate, enforce unique id, and request a reload."""
     flow = cf_mod.OPNsenseConfigFlow()
     flow.hass = MagicMock()
 
-    async def _fake_validate_input(hass, user_input, config_step, errors, expected_id=None):
+    async def _fake_validate_input(
+        hass, user_input, config_step, errors, expected_id=None
+    ):
         return {}
 
     reconfigure_entry = make_config_entry(
@@ -667,7 +744,9 @@ async def test_async_step_reconfigure_updates_existing_entry(monkeypatch, make_c
 
 
 @pytest.mark.asyncio
-async def test_async_step_import_abort_and_reauth_show_form(monkeypatch, make_config_entry):
+async def test_async_step_import_abort_and_reauth_show_form(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """Import failures should abort, and reauth should render and delegate correctly."""
     flow = cf_mod.OPNsenseConfigFlow()
     flow.hass = MagicMock()
@@ -710,10 +789,16 @@ async def test_async_step_import_abort_and_reauth_show_form(monkeypatch, make_co
 
 
 @pytest.mark.asyncio
-async def test_device_tracker_shows_form_when_no_user_input(monkeypatch, make_config_entry):
+async def test_device_tracker_shows_form_when_no_user_input(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """async_step_device_tracker should show form containing data_schema when called without user_input."""
     cfg = make_config_entry(
-        data={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        data={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+        },
         options={cf_mod.CONF_DEVICES: ["11:22:33:44:55:66"]},
     )
 
@@ -742,10 +827,16 @@ async def test_device_tracker_shows_form_when_no_user_input(monkeypatch, make_co
 
 
 @pytest.mark.asyncio
-async def test_device_tracker_handles_arp_lookup_failure(monkeypatch, make_config_entry):
+async def test_device_tracker_handles_arp_lookup_failure(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """ARP lookup failures should not abort the options flow form rendering."""
     cfg = make_config_entry(
-        data={cf_mod.CONF_URL: "https://x", cf_mod.CONF_USERNAME: "u", cf_mod.CONF_PASSWORD: "p"},
+        data={
+            cf_mod.CONF_URL: "https://x",
+            cf_mod.CONF_USERNAME: "u",
+            cf_mod.CONF_PASSWORD: "p",
+        },
         options={cf_mod.CONF_DEVICES: ["AA-BB-CC-DD-EE-FF"]},
     )
     flow = cf_mod.OPNsenseOptionsFlow(cfg)
@@ -768,7 +859,9 @@ async def test_device_tracker_handles_arp_lookup_failure(monkeypatch, make_confi
 
 
 @pytest.mark.asyncio
-async def test_options_flow_device_tracker_user_input(monkeypatch, make_config_entry):
+async def test_options_flow_device_tracker_user_input(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """When user submits manual devices, they should be parsed and saved to options."""
     # Build a fake config_entry using shared factory
     config_entry = make_config_entry(
@@ -787,7 +880,9 @@ async def test_options_flow_device_tracker_user_input(monkeypatch, make_config_e
     flow.hass.config_entries.async_update_entry = MagicMock()
     # make the flow aware of its handler so config_entry property works during tests
     flow.handler = "opnsense"
-    flow.hass.config_entries.async_get_known_entry = MagicMock(return_value=config_entry)
+    flow.hass.config_entries.async_get_known_entry = MagicMock(
+        return_value=config_entry
+    )
 
     # emulate what async_step_init would do: populate _config and _options from entry
     flow._config = dict(config_entry.data)
@@ -807,11 +902,16 @@ async def test_options_flow_device_tracker_user_input(monkeypatch, make_config_e
     assert cf_mod.CONF_DEVICES in flow._options
     assert "aa:bb:cc:dd:ee:ff" in flow._options[cf_mod.CONF_DEVICES]
     assert "11:22:33:44:55:66" in flow._options[cf_mod.CONF_DEVICES]
-    assert flow._options[cf_mod.CONF_DEVICES] == ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
+    assert flow._options[cf_mod.CONF_DEVICES] == [
+        "11:22:33:44:55:66",
+        "aa:bb:cc:dd:ee:ff",
+    ]
 
 
 @pytest.mark.asyncio
-async def test_options_flow_device_tracker_track_all_clears_device_list(make_config_entry):
+async def test_options_flow_device_tracker_track_all_clears_device_list(
+    make_config_entry,
+) -> None:
     """Track-all mode from init should persist the legacy empty-device-list behavior."""
     config_entry = make_config_entry(
         data={
@@ -830,7 +930,9 @@ async def test_options_flow_device_tracker_track_all_clears_device_list(make_con
     flow.hass.config_entries = MagicMock()
     flow.hass.config_entries.async_update_entry = MagicMock()
     flow.handler = "opnsense"
-    flow.hass.config_entries.async_get_known_entry = MagicMock(return_value=config_entry)
+    flow.hass.config_entries.async_get_known_entry = MagicMock(
+        return_value=config_entry
+    )
     flow._config = dict(config_entry.data)
     flow._options = dict(config_entry.options)
 
@@ -846,7 +948,9 @@ async def test_options_flow_device_tracker_track_all_clears_device_list(make_con
 
 
 @pytest.mark.asyncio
-async def test_options_flow_init_selected_mode_shows_picker_step(monkeypatch, make_config_entry):
+async def test_options_flow_init_selected_mode_shows_picker_step(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """Selected-only mode should continue to the device picker step."""
     config_entry = make_config_entry(
         data={
@@ -861,7 +965,9 @@ async def test_options_flow_init_selected_mode_shows_picker_step(monkeypatch, ma
     flow.hass.config_entries = MagicMock()
     flow.hass.config_entries.async_update_entry = MagicMock()
     flow.handler = "opnsense"
-    flow.hass.config_entries.async_get_known_entry = MagicMock(return_value=config_entry)
+    flow.hass.config_entries.async_get_known_entry = MagicMock(
+        return_value=config_entry
+    )
     monkeypatch.setattr(cf_mod, "_get_dt_entries", AsyncMock(return_value={}))
 
     result = await flow.async_step_init(
@@ -875,7 +981,9 @@ async def test_options_flow_init_selected_mode_shows_picker_step(monkeypatch, ma
 
 
 @pytest.mark.asyncio
-async def test_options_flow_init_and_device_tracker_guard_branches(make_config_entry):
+async def test_options_flow_init_and_device_tracker_guard_branches(
+    make_config_entry,
+) -> None:
     """Options flow should render init form and clear device selections when disabled."""
     config_entry = make_config_entry(
         data={
@@ -895,7 +1003,9 @@ async def test_options_flow_init_and_device_tracker_guard_branches(make_config_e
     flow.hass.config_entries = MagicMock()
     flow.hass.config_entries.async_update_entry = MagicMock()
     flow.handler = "opnsense"
-    flow.hass.config_entries.async_get_known_entry = MagicMock(return_value=config_entry)
+    flow.hass.config_entries.async_get_known_entry = MagicMock(
+        return_value=config_entry
+    )
     flow._config = dict(config_entry.data)
     flow._options = dict(config_entry.options)
 

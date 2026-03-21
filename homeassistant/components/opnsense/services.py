@@ -226,7 +226,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         service=SERVICE_GET_VNSTAT_METRICS,
         schema=vol.Schema(
             {
-                vol.Required("period"): vol.All(cv.string, vol.Lower, vol.In(_VNSTAT_PERIODS)),
+                vol.Required("period"): vol.All(
+                    cv.string, vol.Lower, vol.In(_VNSTAT_PERIODS)
+                ),
                 vol.Optional("device_id"): vol.Any(cv.string),
                 vol.Optional("entity_id"): vol.Any(cv.string),
             }
@@ -276,7 +278,7 @@ async def _get_clients(
     if opndevice_id:
         try:
             device_entry = dr.async_get(hass).async_get(opndevice_id)
-        except (TypeError, AttributeError, HomeAssistantError):
+        except TypeError, AttributeError, HomeAssistantError:
             pass
         else:
             # _LOGGER.debug(f"[get_clients] device_id: {opndevice_id}, device_entry: {device_entry}")
@@ -285,7 +287,7 @@ async def _get_clients(
     if opnentity_id:
         try:
             entity_entry = er.async_get(hass).async_get(opnentity_id)
-        except (TypeError, AttributeError, HomeAssistantError):
+        except TypeError, AttributeError, HomeAssistantError:
             pass
         else:
             # _LOGGER.debug(f"[get_clients] entity_id: {opnentity_id}, entity_entry: {entity_entry}")
@@ -465,10 +467,14 @@ async def _service_reload_interface(hass: HomeAssistant, call: ServiceCall) -> N
         if success is None or success:
             success = response
     if success is None or not success:
-        raise ServiceValidationError(f"Reload Interface Failed: {call.data.get('interface')}")
+        raise ServiceValidationError(
+            f"Reload Interface Failed: {call.data.get('interface')}"
+        )
 
 
-async def _service_generate_vouchers(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+async def _service_generate_vouchers(
+    hass: HomeAssistant, call: ServiceCall
+) -> ServiceResponse:
     clients: list = await _get_clients(
         hass=hass,
         opndevice_id=call.data.get("device_id", []),
@@ -480,7 +486,9 @@ async def _service_generate_vouchers(hass: HomeAssistant, call: ServiceCall) -> 
             vouchers: list = await client.generate_vouchers(call.data)
         except VoucherServerError as e:
             _LOGGER.error("Error getting vouchers from %s. %s", client.name, e)
-            raise ServiceValidationError(f"Error getting vouchers from {client.name}. {e}") from e
+            raise ServiceValidationError(
+                f"Error getting vouchers from {client.name}. {e}"
+            ) from e
         _LOGGER.debug(
             "[service_generate_vouchers] client: %s, data: %s, vouchers: %s",
             client.name,
@@ -500,7 +508,9 @@ async def _service_generate_vouchers(hass: HomeAssistant, call: ServiceCall) -> 
     return final_vouchers
 
 
-async def _service_kill_states(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+async def _service_kill_states(
+    hass: HomeAssistant, call: ServiceCall
+) -> ServiceResponse:
     clients: list = await _get_clients(
         hass=hass,
         opndevice_id=call.data.get("device_id", []),
@@ -534,7 +544,9 @@ async def _service_kill_states(hass: HomeAssistant, call: ServiceCall) -> Servic
     return None
 
 
-async def _service_run_speedtest(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+async def _service_run_speedtest(
+    hass: HomeAssistant, call: ServiceCall
+) -> ServiceResponse:
     """Run speedtest and return speedtest results in action response data.
 
     Parameters
@@ -558,7 +570,9 @@ async def _service_run_speedtest(hass: HomeAssistant, call: ServiceCall) -> Serv
     response_list: list[dict[str, Any]] = []
     for client in clients:
         response = await client.run_speedtest()
-        _LOGGER.debug("[service_run_speedtest] client: %s, response: %s", client.name, response)
+        _LOGGER.debug(
+            "[service_run_speedtest] client: %s, response: %s", client.name, response
+        )
         if not isinstance(response, MutableMapping) or len(response) == 0:
             continue
         run_result: dict[str, Any] = {"client_name": client.name}
@@ -574,7 +588,9 @@ async def _service_run_speedtest(hass: HomeAssistant, call: ServiceCall) -> Serv
     return return_response
 
 
-async def _service_get_vnstat_metrics(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+async def _service_get_vnstat_metrics(
+    hass: HomeAssistant, call: ServiceCall
+) -> ServiceResponse:
     """Return parsed vnStat metrics for a selected period as action response data.
 
     Parameters
@@ -629,7 +645,9 @@ async def _service_toggle_alias(hass: HomeAssistant, call: ServiceCall) -> None:
     )
     success: bool | None = None
     for client in clients:
-        response = await client.toggle_alias(call.data.get("alias"), call.data.get("toggle_on_off"))
+        response = await client.toggle_alias(
+            call.data.get("alias"), call.data.get("toggle_on_off")
+        )
         _LOGGER.debug(
             "[service_toggle_alias] client: %s, alias: %s, response: %s",
             client.name,

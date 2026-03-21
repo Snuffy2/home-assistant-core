@@ -11,7 +11,7 @@ from homeassistant.components.switch import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
 from .const import (
@@ -64,7 +64,7 @@ async def _compile_service_switches(
     for service in state.get("services", []):
         if service.get("locked", 1) == 1:
             continue
-        for prop_name in ["status"]:
+        for prop_name in ("status",):
             entity = OPNsenseServiceSwitch(
                 config_entry=config_entry,
                 coordinator=coordinator,
@@ -412,7 +412,7 @@ async def _compile_nat_npt_rules_switches(
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the OPNsense switches.
 
@@ -1000,7 +1000,7 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
         if not isinstance(self._service, MutableMapping):
             return
         try:
-            self._attr_is_on = bool(self._service[self._prop_name])
+            self._attr_is_on = self._service[self._prop_name]
         except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
@@ -1097,13 +1097,9 @@ class OPNsenseUnboundBlocklistSwitch(OPNsenseSwitch):
             self._available = False
             self.async_write_ha_state()
             return
-        state = raw_state
-        dnsbl_container = state.get(ATTR_UNBOUND_BLOCKLIST, {})
-        if not isinstance(dnsbl_container, MutableMapping):
-            self._available = False
-            self.async_write_ha_state()
-            return
-        dnsbl = dnsbl_container.get(self._uuid, {})
+        dnsbl = self.coordinator.data.get(ATTR_UNBOUND_BLOCKLIST, {}).get(
+            self._uuid, {}
+        )
         if not isinstance(dnsbl, MutableMapping) or len(dnsbl) == 0:
             self._available = False
             self.async_write_ha_state()
@@ -1206,7 +1202,7 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
             self.async_write_ha_state()
             return
         try:
-            self._attr_is_on = bool(instance["enabled"])
+            self._attr_is_on = instance["enabled"]
         except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()

@@ -1,4 +1,4 @@
-"""Test fixtures and helpers for the hass-opnsense integration.
+"""Test fixtures and helpers for the the OPNsense integration integration.
 
 This module provides pytest fixtures, fake clients, and monkeypatch helpers
 used across the integration's test suite to avoid network IO, neutralize
@@ -21,6 +21,7 @@ import pytest
 import homeassistant.components.opnsense as _init_mod
 from homeassistant.components.opnsense.const import CONF_DEVICE_UNIQUE_ID
 import homeassistant.core as ha_core
+from homeassistant.core import HomeAssistant
 from homeassistant.util.async_ import get_scheduled_timer_handles
 
 from tests.common import MockConfigEntry
@@ -34,7 +35,7 @@ pyopnsense = _pyopnsense_mod
 class FakeClientSession:
     """Minimal fake client session used by tests in lieu of aiohttp.ClientSession."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the fake client session (no-op)."""
 
     async def __aenter__(self):
@@ -66,7 +67,9 @@ def _ensure_async_create_task_mock(real, side_effect):
     ):
         # Try object.__setattr__ in case of attribute protections.
         with contextlib.suppress(AttributeError, TypeError):
-            object.__setattr__(real, "async_create_task", MagicMock(side_effect=side_effect))
+            object.__setattr__(
+                real, "async_create_task", MagicMock(side_effect=side_effect)
+            )
     if not hasattr(real, "async_create_task") or not isinstance(
         getattr(real, "async_create_task", None), MagicMock
     ):
@@ -82,7 +85,7 @@ def _ensure_async_create_task_mock(real, side_effect):
 
 
 @pytest.fixture(autouse=True)
-def _patch_async_create_clientsession(monkeypatch):
+def _patch_async_create_clientsession(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure the integration's async_create_clientsession does not create real sessions.
 
     This prevents tests from opening real network resources and leaking connectors.
@@ -108,7 +111,7 @@ def coordinator_capture():
     class _C:
         instances: list = []
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.instances = []
 
         def factory(self, coord_cls=None):
@@ -137,9 +140,11 @@ def fake_stream_response_factory():
       - .content.iter_chunked(n) async generator yielding provided chunks
     """
 
-    def _make(chunks: list[bytes], status: int = 200, reason: str = "OK", ok: bool = True):
+    def _make(
+        chunks: list[bytes], status: int = 200, reason: str = "OK", ok: bool = True
+    ):
         class _Resp:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.status = status
                 self.reason = reason
                 self.ok = ok
@@ -153,7 +158,7 @@ def fake_stream_response_factory():
             @property
             def content(self):
                 class C:
-                    def __init__(self, chunks):
+                    def __init__(self, chunks: list[bytes]) -> None:
                         self._chunks = chunks
 
                     async def iter_chunked(self, _n):
@@ -208,7 +213,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(autouse=True)
-def _patch_homeassistant_stop(monkeypatch):
+def _patch_homeassistant_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Wrap HomeAssistant.stop to ignore 'Event loop is closed' runtime errors.
 
     Some tests or integrations can close the event loop unexpectedly. During
@@ -240,7 +245,7 @@ def _patch_homeassistant_stop(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _patch_asyncio_create_task(monkeypatch):
+def _patch_asyncio_create_task(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch asyncio.create_task to avoid creating background workers for pyopnsense during tests.
 
     For coroutines created by pyopnsense, close the coroutine object and return a dummy task-like
@@ -256,11 +261,16 @@ def _patch_asyncio_create_task(monkeypatch):
     # ImportError here since the module import already occurred at module
     # load time. Instead, detect presence safely using globals() and
     # getattr.
-    if "_pyopnsense_mod" in globals() and getattr(_pyopnsense_mod, "asyncio", None) is not None:
+    if (
+        "_pyopnsense_mod" in globals()
+        and getattr(_pyopnsense_mod, "asyncio", None) is not None
+    ):
         # Prefer the module-scoped asyncio.create_task when available so we can
         # delegate for non-target coroutines. Fall back to the global
         # asyncio.create_task if the module doesn't expose one.
-        _original_create_task = getattr(_pyopnsense_mod.asyncio, "create_task", asyncio.create_task)
+        _original_create_task = getattr(
+            _pyopnsense_mod.asyncio, "create_task", asyncio.create_task
+        )
     else:
         # pyopnsense.asyncio is not present; delegate to the global
         # asyncio.create_task. We intentionally avoid patching the global
@@ -279,8 +289,10 @@ def _patch_asyncio_create_task(monkeypatch):
         if frame:
             try:
                 g = getattr(frame, "f_globals", None) or {}
-                module_name = g.get("__name__", "") if isinstance(g, MutableMapping) else ""
-            except (AttributeError, TypeError):
+                module_name = (
+                    g.get("__name__", "") if isinstance(g, MutableMapping) else ""
+                )
+            except AttributeError, TypeError:
                 module_name = ""
 
         # Match module names that include 'pyopnsense' (e.g. 'homeassistant.components.opnsense.pyopnsense')
@@ -315,8 +327,7 @@ def _patch_asyncio_create_task(monkeypatch):
                             cb(self)
 
                     def __await__(self):
-                        if False:
-                            yield None  # pragma: no cover
+                        yield from ()
 
                 return _DoneTask()
             else:
@@ -345,7 +356,7 @@ def _patch_asyncio_create_task(monkeypatch):
             on the underlying real asyncio module via __getattr__.
             """
 
-            def __init__(self, real, create_task_impl):
+            def __init__(self, real: Any, create_task_impl: Any) -> None:
                 self._real = real
                 # store the impl as a bound attribute so monkeypatch can
                 # replace it later if needed
@@ -368,7 +379,9 @@ def _patch_asyncio_create_task(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
+def _neutralize_pyopnsense_background_tasks(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
     """Autouse fixture to replace pyopnsense background queue workers with no-ops.
 
     This prevents the integration from scheduling background coroutines during
@@ -393,9 +406,12 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
                 path_parts[index : index + 2] == ("tests", "pyopnsense")
                 for index in range(len(path_parts) - 1)
             )
-            if normalized_path.name == "test_pyopnsense.py" or has_pyopnsense_test_segments:
+            if (
+                normalized_path.name == "test_pyopnsense.py"
+                or has_pyopnsense_test_segments
+            ):
                 return
-    except (AttributeError, TypeError):
+    except AttributeError, TypeError:
         # If we cannot determine the requesting test, continue with patching.
         pass
 
@@ -407,7 +423,7 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
             monkeypatch.setattr(
                 pyopnsense.OPNsenseClient, "_process_queue", _noop_async, raising=False
             )
-    except (AttributeError, TypeError):
+    except AttributeError, TypeError:
         # best-effort; continue to fallback below
         pass
 
@@ -444,8 +460,12 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
                 if frame:
                     try:
                         g = getattr(frame, "f_globals", None) or {}
-                        module_name = g.get("__name__", "") if isinstance(g, MutableMapping) else ""
-                    except (AttributeError, TypeError):
+                        module_name = (
+                            g.get("__name__", "")
+                            if isinstance(g, MutableMapping)
+                            else ""
+                        )
+                    except AttributeError, TypeError:
                         module_name = ""
 
                 # If the coroutine originates from a test-local no-op but is a
@@ -462,7 +482,7 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
                             and isinstance(self_obj, pyopnsense.OPNsenseClient)
                         ):
                             is_pyopnsense_bound = True
-                    except (AttributeError, TypeError):
+                    except AttributeError, TypeError:
                         is_pyopnsense_bound = False
 
                 if is_pyopnsense_bound or (
@@ -497,8 +517,7 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
                                     cb(self)
 
                             def __await__(self):
-                                if False:
-                                    yield None  # pragma: no cover
+                                yield from ()
 
                         return _DoneTask()
                     else:
@@ -506,8 +525,10 @@ def _neutralize_pyopnsense_background_tasks(monkeypatch, request):  # noqa: C901
 
                 return orig(coro, *args, **kwargs)
 
-            monkeypatch.setattr(target_asyncio, "create_task", _wrap_create_task, raising=False)
-    except (AttributeError, TypeError):
+            monkeypatch.setattr(
+                target_asyncio, "create_task", _wrap_create_task, raising=False
+            )
+    except AttributeError, TypeError:
         # Best-effort; do not fail tests if this decoration cannot be applied.
         pass
 
@@ -558,7 +579,7 @@ def fake_client():
         close_result: bool = True,
     ):
         class FakeClient:
-            def __init__(self, **kwargs):
+            def __init__(self, **kwargs: Any) -> None:
                 # allow explicit overrides via kwargs when tests call the production
                 # client factory with parameters; prefer explicit args passed to
                 # the fixture factory above.
@@ -628,10 +649,12 @@ def fake_reg_factory():
     """
 
     def _make(
-        device_exists: bool = False, device_id: str = "dev", remove_result: object | None = None
+        device_exists: bool = False,
+        device_id: str = "dev",
+        remove_result: object | None = None,
     ):
         class _FakeReg:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.removed = False
                 self._device_exists = device_exists
                 self._device_id = device_id
@@ -679,7 +702,7 @@ def fake_flow_client():
 
             last_instance: FakeFlowClient | None = None
 
-            def __init__(self, *args, **kwargs):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
                 FakeFlowClient.last_instance = self
                 self._is_plugin_called = 0
                 self._device_id = device_id
@@ -717,9 +740,11 @@ def fake_coordinator():
     """
 
     class FakeCoordinator:
-        def __init__(self, **kwargs):
+        def __init__(self, **kwargs: Any) -> None:
             # mirror existing tests which inspect this flag
             self._is_device_tracker = kwargs.get("device_tracker_coordinator", False)
+            self.refreshed = False
+            self.shut = False
 
         async def async_config_entry_first_refresh(self):
             # mark that initial refresh happened for assertions
@@ -764,7 +789,9 @@ def make_config_entry():
     ) -> MockConfigEntry:
         data = data or {CONF_DEVICE_UNIQUE_ID: "test-device-123"}
         entry = MockConfigEntry(
-            domain="opnsense", data=data, title=(title if title is not None else "OPNSense Test")
+            domain="opnsense",
+            data=data,
+            title=(title if title is not None else "OPNSense Test"),
         )
 
         # Apply optional attributes using object.__setattr__ to bypass property protections.
@@ -784,7 +811,10 @@ def make_config_entry():
 
 
 @pytest.fixture
-def ph_hass(request, hass=None):
+def ph_hass(
+    request: pytest.FixtureRequest,
+    hass: HomeAssistant = cast(HomeAssistant, None),
+) -> HomeAssistant | MagicMock:
     """Safe hass-like fixture: prefer real PHCC `hass` when available.
 
     Prefer the pytest-injected `hass` fixture when the pytest-homeassistant-
@@ -856,7 +886,7 @@ def ph_hass(request, hass=None):
         real_loop = asyncio.new_event_loop()
 
     class FakeLoop:
-        def __init__(self, loop):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
             self._loop = loop
 
         def call_later(self, delay, callback, *args):
@@ -909,7 +939,7 @@ def pytest_runtest_teardown(item: Any, nextitem: Any) -> None:
         try:
             # Prefer the fixture value for the current test if present.
             replace_loop = bool(item.funcargs.get("expected_lingering_timers", False))
-        except (AttributeError, KeyError):
+        except AttributeError, KeyError:
             replace_loop = False
 
         if replace_loop:
@@ -917,7 +947,7 @@ def pytest_runtest_teardown(item: Any, nextitem: Any) -> None:
                 new_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(new_loop)
                 event_loop = new_loop
-            except (OSError, RuntimeError):
+            except OSError, RuntimeError:
                 # Best-effort: if we cannot recreate the loop, continue and
                 # let teardown attempt to proceed (it may still error).
                 pass
@@ -927,7 +957,7 @@ def pytest_runtest_teardown(item: Any, nextitem: Any) -> None:
     # gracefully.
     try:
         handles = get_scheduled_timer_handles(event_loop)
-    except (RuntimeError, OSError):
+    except RuntimeError, OSError:
         handles = []
 
     for handle in handles:

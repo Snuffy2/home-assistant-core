@@ -9,12 +9,12 @@ from homeassistant.components.update import (
     UpdateDeviceClass,
     UpdateEntity,
     UpdateEntityDescription,
+    UpdateEntityFeature,
 )
-from homeassistant.components.update.const import UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import slugify
 
 from .const import CONF_SYNC_FIRMWARE_UPDATES, COORDINATOR, DEFAULT_SYNC_OPTION_VALUE
@@ -30,7 +30,7 @@ PARALLEL_UPDATES = 0
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the OPNsense update entities."""
     coordinator: OPNsenseDataUpdateCoordinator = getattr(
@@ -165,38 +165,42 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 
     def _is_update_available(self, state: MutableMapping[str, Any]) -> bool:
         try:
-            return bool(state["firmware_update_info"]["status"] != "error")
+            status = state["firmware_update_info"]["status"]
         except TypeError, KeyError, AttributeError:
             return False
+        return isinstance(status, str) and status != "error"
 
     def _get_installed_version(self, state: MutableMapping[str, Any]) -> str | None:
         try:
-            version = dict_get(state, "firmware_update_info.product.product_version")
-            return version if isinstance(version, str) else None
+            return dict_get(state, "firmware_update_info.product.product_version")
         except TypeError, KeyError, AttributeError:
             return None
+
+    @staticmethod
+    def _get_opnsense_package_version(packages: list[Any]) -> str | None:
+        """Return the pending OPNsense package version, if present."""
+        for package in packages:
+            if not isinstance(package, MutableMapping):
+                continue
+            if package.get("name") != "opnsense":
+                continue
+            new_version = package.get("new_version")
+            if isinstance(new_version, str):
+                return new_version
+        return None
 
     def _get_versions(
         self, state: MutableMapping[str, Any]
     ) -> tuple[str | None, str | None, str | None]:
         try:
-            raw_product_version = dict_get(
+            product_version = dict_get(
                 state, "firmware_update_info.product.product_version"
             )
-            raw_product_latest = dict_get(
+            product_latest = dict_get(
                 state, "firmware_update_info.product.product_latest"
             )
-            raw_product_series = dict_get(
+            product_series = dict_get(
                 state, "firmware_update_info.product.product_series"
-            )
-            product_version = (
-                raw_product_version if isinstance(raw_product_version, str) else None
-            )
-            product_latest = (
-                raw_product_latest if isinstance(raw_product_latest, str) else None
-            )
-            product_series = (
-                raw_product_series if isinstance(raw_product_series, str) else None
             )
             if product_version is None or product_latest is None:
                 return product_version, None, product_series
@@ -206,43 +210,19 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                 packages = dict_get(
                     state, "firmware_update_info.product.product_check.upgrade_packages"
                 )
-                if product_version == product_latest:
-                    if isinstance(packages, list):
-                        package_found: bool = False
-                        for package in packages:
-                            if package.get("name") == "opnsense" and package.get(
-                                "new_version"
-                            ):
-                                package_found = True
-                                new_version = package.get("new_version")
-                                product_latest = (
-                                    new_version
-                                    if isinstance(new_version, str)
-                                    else product_latest
-                                )
-                                break
-                        if not package_found:
-                            product_latest = f"{product_latest}+"
-                    else:
+                if not isinstance(packages, list):
+                    if product_version == product_latest:
                         product_latest = f"{product_latest}+"
-                elif isinstance(packages, list):
-                    for package in packages:
-                        if package.get("name") == "opnsense" and package.get(
-                            "new_version"
-                        ):
-                            new_version = package.get("new_version")
-                            if isinstance(new_version, str):
-                                product_latest = new_version
-                            break
+                else:
+                    package_version = self._get_opnsense_package_version(packages)
+                    if product_version == product_latest:
+                        product_latest = package_version or f"{product_latest}+"
+                    elif package_version:
+                        product_latest = package_version
 
             if status == "upgrade":
-                raw_upgrade_version = dict_get(
+                product_latest = dict_get(
                     state, "firmware_update_info.upgrade_major_version"
-                )
-                product_latest = (
-                    raw_upgrade_version
-                    if isinstance(raw_upgrade_version, str)
-                    else None
                 )
                 if product_latest:
                     product_series = (

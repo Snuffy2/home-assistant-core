@@ -57,7 +57,9 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
             "for Device Tracker" if device_tracker_coordinator else "",
         )
         if config_entry is None:
-            raise ValueError("config_entry is required for OPNsenseDataUpdateCoordinator")
+            raise ValueError(
+                "config_entry is required for OPNsenseDataUpdateCoordinator"
+            )
         self._client: OPNsenseClient = client
         self._state: dict[str, Any] = {}
         self._device_tracker_coordinator: bool = device_tracker_coordinator
@@ -91,7 +93,9 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
             if method is not None:
                 start_time: float = time.perf_counter()
                 if method_name == "get_device_unique_id":
-                    state[cat.get("state_key")] = await method(expected_id=self._device_unique_id)
+                    state[cat.get("state_key")] = await method(
+                        expected_id=self._device_unique_id
+                    )
                 else:
                     state[cat.get("state_key")] = await method()
                 end_time: float = time.perf_counter()
@@ -111,7 +115,7 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
     def _build_categories(self) -> list[dict[str, str]]:
         """Build the categories for fetching data."""
         if not self.config_entry:
-            _LOGGER.error("Coordinator build_categories failed. No config entry found.")
+            _LOGGER.error("Coordinator build_categories failed. No config entry found")
             return []
         config: Mapping[str, Any] = self.config_entry.data
         categories: list[dict[str, str]] = [
@@ -153,7 +157,9 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                 ]
             )
         if config.get(CONF_SYNC_DHCP_LEASES, DEFAULT_SYNC_OPTION_VALUE):
-            categories.append({"function": "get_dhcp_leases", "state_key": "dhcp_leases"})
+            categories.append(
+                {"function": "get_dhcp_leases", "state_key": "dhcp_leases"}
+            )
         if config.get(CONF_SYNC_GATEWAYS, DEFAULT_SYNC_OPTION_VALUE):
             categories.append({"function": "get_gateways", "state_key": "gateways"})
         if config.get(CONF_SYNC_SERVICES, DEFAULT_SYNC_OPTION_VALUE):
@@ -172,16 +178,21 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
         if config.get(CONF_SYNC_INTERFACES, DEFAULT_SYNC_OPTION_VALUE):
             categories.append({"function": "get_interfaces", "state_key": "interfaces"})
         if config.get(CONF_SYNC_CERTIFICATES, DEFAULT_SYNC_OPTION_VALUE):
-            categories.append({"function": "get_certificates", "state_key": "certificates"})
+            categories.append(
+                {"function": "get_certificates", "state_key": "certificates"}
+            )
         _LOGGER.debug(
-            "Categories for fetching data: %s", [item["state_key"] for item in categories]
+            "Categories for fetching data: %s",
+            [item["state_key"] for item in categories],
         )
         return categories
 
     async def _check_device_unique_id(self) -> bool:
         """Check if the device unique ID matches the one in the config."""
         if self._state.get("device_unique_id") is None:
-            _LOGGER.warning("Coordinator failed to confirm OPNsense Router Unique ID. Will retry")
+            _LOGGER.warning(
+                "Coordinator failed to confirm OPNsense Router Unique ID. Will retry"
+            )
             self._mismatched_count = 0
             return False
         if self._state.get("device_unique_id") != self._device_unique_id:
@@ -192,7 +203,7 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
             )
             _LOGGER.error(
                 "Coordinator error. "
-                "OPNsense Router Device ID (%s) differs from the one saved in hass-opnsense (%s)",
+                "OPNsense Router Device ID (%s) differs from the one saved in the OPNsense integration (%s)",
                 self._state.get("device_unique_id"),
                 self._device_unique_id,
             )
@@ -210,8 +221,8 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                 )
                 _LOGGER.error(
                     "OPNsense Device ID has changed which indicates new or changed hardware. "
-                    "In order to accommodate this, hass-opnsense needs to be removed and reinstalled for this router. "
-                    "hass-opnsense is shutting down."
+                    "In order to accommodate this, the OPNsense integration needs to be removed and reinstalled for this router. "
+                    "The OPNsense integration is shutting down"
                 )
                 await self.async_shutdown()
             return False
@@ -234,11 +245,13 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
         ]
         self._state.update(await self._get_states(categories))
         if self._state.get("device_unique_id") is None:
-            _LOGGER.warning("Coordinator failed to confirm OPNsense Router Unique ID. Will retry")
+            _LOGGER.warning(
+                "Coordinator failed to confirm OPNsense Router Unique ID. Will retry"
+            )
             return {}
         if self._state.get("device_unique_id") != self._device_unique_id:
             _LOGGER.error(
-                "Coordinator error. OPNsense Router Device ID (%s) differs from the one saved in hass-opnsense (%s)",
+                "Coordinator error. OPNsense Router Device ID (%s) differs from the one saved in the OPNsense integration (%s)",
                 self._state.get("device_unique_id"),
                 self._device_unique_id,
             )
@@ -302,7 +315,9 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                         instance[new_property] = value
 
     async def _calculate_interface_speeds(self, elapsed_time: float) -> None:
-        for interface_name, interface in (dict_get(self._state, "interfaces", {}) or {}).items():
+        for interface_name, interface in (
+            dict_get(self._state, "interfaces", {}) or {}
+        ).items():
             previous_interface = dict_get(
                 self._state,
                 f"previous_state.interfaces.{interface_name}",
@@ -404,7 +419,7 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             change: float = abs(current_parent_value - previous_parent_value)
             rate: float = change / elapsed_time
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             rate = 0
 
         value: float = 0

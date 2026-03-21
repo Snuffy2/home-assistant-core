@@ -11,7 +11,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     CONF_SYNC_CARP,
@@ -31,7 +31,7 @@ PARALLEL_UPDATES = 0
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the OPNsense binary sensors."""
 
@@ -114,7 +114,7 @@ class OPNsenseCarpStatusBinarySensor(OPNsenseBinarySensor):
             return
         state = raw_state
         try:
-            self._attr_is_on = bool(state["carp_status"])
+            self._attr_is_on = state["carp_status"]
         except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
@@ -136,7 +136,7 @@ class OPNsensePendingNoticesPresentBinarySensor(OPNsenseBinarySensor):
             return
         state = raw_state
         try:
-            self._attr_is_on = bool(state["notices"]["pending_notices_present"])
+            self._attr_is_on = state["notices"]["pending_notices_present"]
         except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()

@@ -10,12 +10,9 @@ from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import (
-    CONNECTION_NETWORK_MAC,
-    DeviceInfo,
-    async_get as async_get_dev_reg,
-)
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
@@ -41,71 +38,51 @@ PARALLEL_UPDATES = 0
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up device tracker for OPNsense component."""
 
-    dev_reg = async_get_dev_reg(hass)
+    dev_reg = dr.async_get(hass)
 
     previous_mac_addresses: list = config_entry.data.get(TRACKED_MACS, [])
     coordinator: OPNsenseDataUpdateCoordinator = getattr(
         config_entry.runtime_data, DEVICE_TRACKER_COORDINATOR
     )
-    raw_state: object = coordinator.data
-    if not isinstance(raw_state, MutableMapping):
-        _LOGGER.error("Missing state data in device tracker async_setup_entry")
-        return
-    state = raw_state
+    state = coordinator.data
     enabled_default = False
     entities: list = []
     mac_addresses: list = []
 
-    # use configured mac addresses if setup, otherwise create an entity per arp entry
     arp_entries = dict_get(state, "arp_table")
     if not isinstance(arp_entries, list):
         arp_entries = []
-    devices: list = []
-    mac_addresses = []
     configured_mac_addresses = config_entry.options.get(CONF_DEVICES, [])
-    if configured_mac_addresses and config_entry.options.get(
+    device_tracker_enabled = config_entry.options.get(
         CONF_DEVICE_TRACKER_ENABLED, DEFAULT_DEVICE_TRACKER_ENABLED
-    ):
+    )
+    devices: list[dict[str, Any]] = []
+    mac_addresses = []
+
+    # Use configured MAC addresses if set up, otherwise create an entity per ARP entry.
+    if configured_mac_addresses and device_tracker_enabled:
         _LOGGER.debug(
             "[device_tracker async_setup_entry] configured_mac_addresses: %s",
             configured_mac_addresses,
         )
         enabled_default = True
-        mac_addresses = configured_mac_addresses
-        for mac_address in mac_addresses:
-            device: dict[str, Any] = {"mac": mac_address}
-            for arp_entry in arp_entries:
-                if mac_address == arp_entry.get("mac", ""):
-                    try:
-                        for attr in ("hostname", "manufacturer"):
-                            value = arp_entry.get(attr, None)
-                            if value:
-                                device.update({attr: value})
-                    except TypeError, KeyError, AttributeError:
-                        pass
-
-            devices.append(device)
-    elif config_entry.options.get(
-        CONF_DEVICE_TRACKER_ENABLED, DEFAULT_DEVICE_TRACKER_ENABLED
-    ):
+        mac_addresses = configured_mac_addresses.copy()
+        devices.extend(
+            _build_device(mac_address, _find_arp_entry(arp_entries, mac_address))
+            for mac_address in mac_addresses
+        )
+    elif device_tracker_enabled:
         for arp_entry in arp_entries:
-            mac_address = arp_entry.get("mac", None)
+            if not isinstance(arp_entry, MutableMapping):
+                continue
+            mac_address = arp_entry.get("mac")
             if mac_address and mac_address not in mac_addresses:
-                device = {"mac": mac_address}
-                try:
-                    for attr in ("hostname", "manufacturer"):
-                        value = arp_entry.get(attr, None)
-                        if value:
-                            device.update({attr: value})
-                except TypeError, KeyError, AttributeError:
-                    pass
-
                 mac_addresses.append(mac_address)
-                devices.append(device)
+                devices.append(_build_device(mac_address, arp_entry))
 
     for device in devices:
         mac = device.get("mac")
@@ -141,6 +118,33 @@ async def async_setup_entry(
 
     _LOGGER.debug("[device_tracker async_setup_entry] entities: %s", len(entities))
     async_add_entities(entities)
+
+
+def _find_arp_entry(
+    arp_entries: list[Any], mac_address: str
+) -> MutableMapping[str, Any] | None:
+    """Find the ARP entry for a MAC address."""
+    for arp_entry in arp_entries:
+        if not isinstance(arp_entry, MutableMapping):
+            continue
+        if arp_entry.get("mac", "") == mac_address:
+            return arp_entry
+    return None
+
+
+def _build_device(
+    mac_address: str, arp_entry: MutableMapping[str, Any] | None
+) -> dict[str, Any]:
+    """Build tracked device metadata from an ARP entry."""
+    device: dict[str, Any] = {"mac": mac_address}
+    if arp_entry is None:
+        return device
+
+    for attr in ("hostname", "manufacturer"):
+        value = arp_entry.get(attr)
+        if value:
+            device[attr] = value
+    return device
 
 
 class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
@@ -205,6 +209,75 @@ class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
         """Return if the entity registry is enabled by default."""
         return self._attr_entity_registry_enabled_default
 
+    @staticmethod
+    def _get_entry_value(entry: MutableMapping[str, Any], key: str) -> str | None:
+        """Return a string value from an ARP entry."""
+        value = entry.get(key)
+        if not isinstance(value, str):
+            return None
+        if key == "hostname":
+            value = value.strip("?")
+        return value or None
+
+    def _update_cached_values(self, entry: MutableMapping[str, Any]) -> None:
+        """Update cached hostname and IP values."""
+        self._attr_ip_address = self._get_entry_value(entry, "ip")
+        if self._attr_ip_address:
+            self._last_known_ip = self._attr_ip_address
+
+        self._attr_hostname = self._get_entry_value(entry, "hostname")
+        if self._attr_hostname:
+            self._last_known_hostname = self._attr_hostname
+
+    def _update_connection_state(
+        self, entry: MutableMapping[str, Any], state: MutableMapping[str, Any]
+    ) -> None:
+        """Update connection tracking state."""
+        if not entry or entry.get("expired", False):
+            self._is_connected = False
+            device_tracker_consider_home = self.config_entry.options.get(
+                CONF_DEVICE_TRACKER_CONSIDER_HOME, DEFAULT_DEVICE_TRACKER_CONSIDER_HOME
+            )
+            if device_tracker_consider_home > 0 and isinstance(
+                self._last_known_connected_time, datetime
+            ):
+                elapsed: timedelta = (
+                    datetime.now().astimezone() - self._last_known_connected_time
+                )
+                if elapsed.total_seconds() < device_tracker_consider_home:
+                    self._is_connected = True
+            return
+
+        update_time = state.get("update_time")
+        if isinstance(update_time, float):
+            self._last_known_connected_time = datetime.fromtimestamp(
+                int(update_time),
+                tz=timezone(datetime.now().astimezone().utcoffset() or timedelta()),
+            )
+        self._is_connected = True
+
+    def _update_entry_attributes(self, entry: MutableMapping[str, Any]) -> None:
+        """Update state attributes from the current ARP entry."""
+        ha_to_opnsense: dict[str, str] = {
+            "interface": "intf_description",
+            "expires": "expires",
+            "type": "type",
+        }
+        for prop_name, opnsense_name in ha_to_opnsense.items():
+            prop = entry.get(opnsense_name)
+            if not prop:
+                continue
+            if prop_name == "expires":
+                if not isinstance(prop, (int, float)):
+                    continue
+                self._attr_extra_state_attributes[prop_name] = (
+                    "Never"
+                    if prop == -1
+                    else datetime.now().astimezone() + timedelta(seconds=prop)
+                )
+                continue
+            self._attr_extra_state_attributes[prop_name] = prop
+
     @callback
     def _handle_coordinator_update(self) -> None:
         raw_state: object = self.coordinator.data
@@ -219,89 +292,19 @@ class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
             self.async_write_ha_state()
             return
         self._available = True
-        entry: dict[str, Any] | None = None
+        entry: MutableMapping[str, Any] | None = None
         for arp_entry in arp_table:
+            if not isinstance(arp_entry, MutableMapping):
+                continue
             if arp_entry.get("mac", "").lower() == self._attr_mac_address:
                 entry = arp_entry
                 break
         if not entry:
             entry = {}
-        # _LOGGER.debug(f"[OPNsenseScannerEntity handle_coordinator_update] entry: {entry}")
-        try:
-            self._attr_ip_address = (
-                entry.get("ip") if len(entry.get("ip", 0)) > 0 else None
-            )
-        except TypeError, KeyError, AttributeError:
-            self._attr_ip_address = None
-
-        if self._attr_ip_address:
-            self._last_known_ip = self._attr_ip_address
-
-        try:
-            self._attr_hostname = (
-                entry.get("hostname", "").strip("?")
-                if len(entry.get("hostname", "").strip("?")) > 0
-                else None
-            )
-        except TypeError, KeyError, AttributeError:
-            self._attr_hostname = None
-
-        if self._attr_hostname:
-            self._last_known_hostname = self._attr_hostname
-
-        if (
-            not isinstance(entry, MutableMapping)
-            or not entry
-            or entry.get("expired", False)
-        ):
-            if self._last_known_ip:
-                # force a ping to _last_known_ip to possibly recreate arp entry?
-                pass
-
-            self._is_connected = False
-            device_tracker_consider_home = self.config_entry.options.get(
-                CONF_DEVICE_TRACKER_CONSIDER_HOME, DEFAULT_DEVICE_TRACKER_CONSIDER_HOME
-            )
-            if device_tracker_consider_home > 0 and isinstance(
-                self._last_known_connected_time, datetime
-            ):
-                elapsed: timedelta = (
-                    datetime.now().astimezone() - self._last_known_connected_time
-                )
-                if elapsed.total_seconds() < device_tracker_consider_home:
-                    self._is_connected = True
-
-        else:
-            # TODO: clear cache under certain scenarios?
-
-            update_time = state.get("update_time")
-            if isinstance(update_time, float):
-                self._last_known_connected_time = datetime.fromtimestamp(
-                    int(update_time),
-                    tz=timezone(datetime.now().astimezone().utcoffset() or timedelta()),
-                )
-            self._is_connected = True
-
-        ha_to_opnsense: dict[str, Any] = {
-            "interface": "intf_description",
-            "expires": "expires",
-            "type": "type",
-        }
-        try:
-            for prop_name in ("interface", "expires", "type"):
-                prop = entry.get(ha_to_opnsense[prop_name])
-                if prop:
-                    if prop_name == "expires":
-                        if prop == -1:
-                            self._attr_extra_state_attributes[prop_name] = "Never"
-                        else:
-                            self._attr_extra_state_attributes[prop_name] = (
-                                datetime.now().astimezone() + timedelta(seconds=prop)
-                            )
-                    else:
-                        self._attr_extra_state_attributes[prop_name] = prop
-        except TypeError, KeyError, AttributeError:
-            pass
+        if isinstance(entry, MutableMapping):
+            self._update_cached_values(entry)
+            self._update_connection_state(entry, state)
+            self._update_entry_attributes(entry)
 
         if self._attr_hostname is None and self._last_known_hostname:
             self._attr_extra_state_attributes["last_known_hostname"] = (

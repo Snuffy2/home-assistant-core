@@ -16,10 +16,10 @@ OPNSENSE_MIN_FIRMWARE = "26.1.1"
 UNDO_UPDATE_LISTENER = "undo_update_listener"
 
 PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.DEVICE_TRACKER,
     Platform.SENSOR,
     Platform.SWITCH,
-    Platform.DEVICE_TRACKER,
-    Platform.BINARY_SENSOR,
     Platform.UPDATE,
 ]
 LOADED_PLATFORMS = "loaded_platforms"
@@ -30,8 +30,6 @@ DEVICE_TRACKER_COORDINATOR = "device_tracker_coordinator"
 SHOULD_RELOAD = "should_reload"
 TRACKED_MACS = "tracked_macs"
 DEFAULT_SCAN_INTERVAL = 30
-CONF_TLS_INSECURE = "tls_insecure"
-DEFAULT_TLS_INSECURE = False
 DEFAULT_VERIFY_SSL = True
 
 CONF_DEVICE_TRACKER_ENABLED = "device_tracker_enabled"
@@ -101,7 +99,6 @@ CONF_MANUAL_DEVICES = "manual_devices"
 
 COUNT = "count"
 
-# pulled from upnp component
 BYTES_RECEIVED = "bytes_received"
 BYTES_SENT = "bytes_sent"
 PACKETS_RECEIVED = "packets_received"
@@ -125,7 +122,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:table-network",
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.pfstate.total": SensorEntityDescription(
         key="telemetry.pfstate.total",
@@ -135,7 +131,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:table-network",
         state_class=None,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.pfstate.used_percent": SensorEntityDescription(
         key="telemetry.pfstate.used_percent",
@@ -145,7 +140,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:table-network",
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     # mbuf
     "telemetry.mbuf.used": SensorEntityDescription(
@@ -158,7 +152,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.KILOBYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.mbuf.total": SensorEntityDescription(
         key="telemetry.mbuf.total",
@@ -170,7 +163,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.KILOBYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.mbuf.used_percent": SensorEntityDescription(
         key="telemetry.mbuf.used_percent",
@@ -180,7 +172,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon=ICON_MEMORY,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     # memory with state_class due to being less static
     "telemetry.memory.swap_reserved": SensorEntityDescription(
@@ -193,7 +184,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.MEGABYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     # memory without state_class due to being generally static
     "telemetry.memory.physmem": SensorEntityDescription(
@@ -206,7 +196,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.memory.used": SensorEntityDescription(
         key="telemetry.memory.used",
@@ -218,7 +207,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.memory.swap_total": SensorEntityDescription(
         key="telemetry.memory.swap_total",
@@ -230,7 +218,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         suggested_display_precision=1,
         suggested_unit_of_measurement=UnitOfInformation.MEGABYTES,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     # memory percentages
     "telemetry.memory.swap_used_percent": SensorEntityDescription(
@@ -241,7 +228,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon=ICON_MEMORY,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.memory.used_percent": SensorEntityDescription(
         key="telemetry.memory.used_percent",
@@ -251,7 +237,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon=ICON_MEMORY,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.cpu.count": SensorEntityDescription(
         key="telemetry.cpu.count",
@@ -261,7 +246,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:speedometer-medium",
         state_class=None,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.cpu.usage_total": SensorEntityDescription(
         key="telemetry.cpu.usage_total",
@@ -271,7 +255,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:speedometer-medium",
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.system.load_average.one_minute": SensorEntityDescription(
         key="telemetry.system.load_average.one_minute",
@@ -282,7 +265,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.system.load_average.five_minute": SensorEntityDescription(
         key="telemetry.system.load_average.five_minute",
@@ -293,7 +275,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.system.load_average.fifteen_minute": SensorEntityDescription(
         key="telemetry.system.load_average.fifteen_minute",
@@ -304,7 +285,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
     "telemetry.system.boottime": SensorEntityDescription(
         key="telemetry.system.boottime",
@@ -313,7 +293,6 @@ STATIC_TELEMETRY_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:clock-outline",
         state_class=None,
         entity_registry_enabled_default=True,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
 }
 
@@ -325,7 +304,6 @@ STATIC_CERTIFICATE_SENSORS: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:certificate-outline",
         state_class=None,
         entity_registry_enabled_default=False,
-        # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
     ),
 }
 
