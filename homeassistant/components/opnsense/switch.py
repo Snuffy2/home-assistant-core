@@ -429,10 +429,11 @@ async def async_setup_entry(
     coordinator: OPNsenseDataUpdateCoordinator = getattr(
         config_entry.runtime_data, COORDINATOR
     )
-    state: Any = coordinator.data
-    if not isinstance(state, MutableMapping):
+    raw_state: object = coordinator.data
+    if not isinstance(raw_state, MutableMapping):
         _LOGGER.error("Missing state data in switch async_setup_entry")
         return
+    state = raw_state
     config: Mapping[str, Any] = config_entry.data
 
     entities: list = []
@@ -611,9 +612,10 @@ class OPNsenseFirewallRuleSwitch(OPNsenseSwitch):
             The rule data if available, None otherwise.
 
         """
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             return None
+        state = raw_state
         firewall = state.get("firewall")
         if not isinstance(firewall, MutableMapping):
             return None
@@ -772,9 +774,10 @@ class OPNsenseNATRuleSwitch(OPNsenseSwitch):
             The rule data if available, None otherwise.
 
         """
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             return None
+        state = raw_state
         firewall = state.get("firewall")
         if not isinstance(firewall, MutableMapping):
             return None
@@ -971,9 +974,10 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
             The service data if available, None otherwise.
 
         """
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             return None
+        state = raw_state
         service_id: str = self._opnsense_get_service_id()
         for service in state.get("services", []):
             if (
@@ -1088,14 +1092,18 @@ class OPNsenseUnboundBlocklistSwitch(OPNsenseSwitch):
                 self.name,
             )
             return
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
-        dnsbl = self.coordinator.data.get(ATTR_UNBOUND_BLOCKLIST, {}).get(
-            self._uuid, {}
-        )
+        state = raw_state
+        dnsbl_container = state.get(ATTR_UNBOUND_BLOCKLIST, {})
+        if not isinstance(dnsbl_container, MutableMapping):
+            self._available = False
+            self.async_write_ha_state()
+            return
+        dnsbl = dnsbl_container.get(self._uuid, {})
         if not isinstance(dnsbl, MutableMapping) or len(dnsbl) == 0:
             self._available = False
             self.async_write_ha_state()
@@ -1182,12 +1190,13 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
                 "Skipping coordinator update for VPN switch %s due to delay", self.name
             )
             return
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
-        instance: Any = (
+        state = raw_state
+        instance = (
             state.get(self._vpn_type, {})
             .get(self._clients_servers, {})
             .get(self._uuid, {})

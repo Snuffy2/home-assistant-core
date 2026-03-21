@@ -107,11 +107,12 @@ class OPNsenseCarpStatusBinarySensor(OPNsenseBinarySensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
+        state = raw_state
         try:
             self._attr_is_on = bool(state["carp_status"])
         except TypeError, KeyError, ZeroDivisionError:
@@ -128,11 +129,12 @@ class OPNsensePendingNoticesPresentBinarySensor(OPNsenseBinarySensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: Any = self.coordinator.data
-        if not isinstance(state, MutableMapping):
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
+        state = raw_state
         try:
             self._attr_is_on = bool(state["notices"]["pending_notices_present"])
         except TypeError, KeyError, ZeroDivisionError:

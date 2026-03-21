@@ -79,12 +79,13 @@ class OPNsenseEntity(OPNsenseBaseEntity):
     @property
     def device_info(self) -> DeviceInfo | None:
         """Device info for the firewall."""
-        state: Any = self.coordinator.data
+        raw_state: object = self.coordinator.data
         model: str = "OPNsense"
         manufacturer: str = "Deciso B.V."
-        if not isinstance(state, dict):
+        if not isinstance(raw_state, dict):
             firmware: str | None = None
         else:
+            state = raw_state
             firmware_value = state.get("host_firmware_version")
             firmware = firmware_value if isinstance(firmware_value, str) else None
 
