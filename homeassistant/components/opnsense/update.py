@@ -12,8 +12,8 @@ from homeassistant.components.update import (
 )
 from homeassistant.components.update.const import UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 
@@ -33,7 +33,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the OPNsense update entities."""
-    coordinator: OPNsenseDataUpdateCoordinator = getattr(config_entry.runtime_data, COORDINATOR)
+    coordinator: OPNsenseDataUpdateCoordinator = getattr(
+        config_entry.runtime_data, COORDINATOR
+    )
     entities: list = []
     config: Mapping[str, Any] = config_entry.data
 
@@ -55,7 +57,7 @@ async def async_setup_entry(
 
 
 class OPNsenseUpdate(OPNsenseEntity, UpdateEntity):
-    """Class for OPNsense Update entitiy."""
+    """Class for an OPNsense update entity."""
 
     def __init__(
         self,
@@ -66,7 +68,9 @@ class OPNsenseUpdate(OPNsenseEntity, UpdateEntity):
         """Initialize update entity."""
 
         name_suffix: str | None = (
-            entity_description.name if isinstance(entity_description.name, str) else None
+            entity_description.name
+            if isinstance(entity_description.name, str)
+            else None
         )
         unique_id_suffix: str | None = (
             entity_description.key if isinstance(entity_description.key, str) else None
@@ -98,7 +102,7 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not self._is_update_available(state):
             self._available = False
             self.async_write_ha_state()
@@ -107,7 +111,9 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 
         self._attr_installed_version = self._get_installed_version(state)
         product_version, product_latest, product_series = self._get_versions(state)
-        self._attr_latest_version = product_latest.replace("_", ".") if product_latest else None
+        self._attr_latest_version = (
+            product_latest.replace("_", ".") if product_latest else None
+        )
 
         product_class = self._get_product_class(product_series)
         _LOGGER.debug(
@@ -125,8 +131,12 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                 self.config_entry.data.get("url", None) + "/ui/core/firmware#changelog"
             )
 
-        _LOGGER.debug("[Update handle_coordinator_update] release_url: %s", self._attr_release_url)
-        self._release_notes = self._get_release_notes(state, product_latest, product_version)
+        _LOGGER.debug(
+            "[Update handle_coordinator_update] release_url: %s", self._attr_release_url
+        )
+        self._release_notes = self._get_release_notes(
+            state, product_latest, product_version
+        )
         self._attr_release_summary = dict_get(state, "firmware_update_info.status_msg")
 
         self._attr_extra_state_attributes = {}
@@ -150,23 +160,39 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 
     def _is_update_available(self, state: MutableMapping[str, Any]) -> bool:
         try:
-            return state["firmware_update_info"]["status"] != "error"
-        except (TypeError, KeyError, AttributeError):
+            return bool(state["firmware_update_info"]["status"] != "error")
+        except TypeError, KeyError, AttributeError:
             return False
 
     def _get_installed_version(self, state: MutableMapping[str, Any]) -> str | None:
         try:
-            return dict_get(state, "firmware_update_info.product.product_version")
-        except (TypeError, KeyError, AttributeError):
+            version = dict_get(state, "firmware_update_info.product.product_version")
+            return version if isinstance(version, str) else None
+        except TypeError, KeyError, AttributeError:
             return None
 
     def _get_versions(
         self, state: MutableMapping[str, Any]
     ) -> tuple[str | None, str | None, str | None]:
         try:
-            product_version = dict_get(state, "firmware_update_info.product.product_version")
-            product_latest = dict_get(state, "firmware_update_info.product.product_latest")
-            product_series = dict_get(state, "firmware_update_info.product.product_series")
+            raw_product_version = dict_get(
+                state, "firmware_update_info.product.product_version"
+            )
+            raw_product_latest = dict_get(
+                state, "firmware_update_info.product.product_latest"
+            )
+            raw_product_series = dict_get(
+                state, "firmware_update_info.product.product_series"
+            )
+            product_version = (
+                raw_product_version if isinstance(raw_product_version, str) else None
+            )
+            product_latest = (
+                raw_product_latest if isinstance(raw_product_latest, str) else None
+            )
+            product_series = (
+                raw_product_series if isinstance(raw_product_series, str) else None
+            )
             if product_version is None or product_latest is None:
                 return product_version, None, product_series
 
@@ -179,9 +205,16 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                     if isinstance(packages, list):
                         package_found: bool = False
                         for package in packages:
-                            if package.get("name") == "opnsense" and package.get("new_version"):
+                            if package.get("name") == "opnsense" and package.get(
+                                "new_version"
+                            ):
                                 package_found = True
-                                product_latest = package.get("new_version")
+                                new_version = package.get("new_version")
+                                product_latest = (
+                                    new_version
+                                    if isinstance(new_version, str)
+                                    else product_latest
+                                )
                                 break
                         if not package_found:
                             product_latest = f"{product_latest}+"
@@ -189,19 +222,30 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                         product_latest = f"{product_latest}+"
                 elif isinstance(packages, list):
                     for package in packages:
-                        if package.get("name") == "opnsense" and package.get("new_version"):
-                            product_latest = package.get("new_version")
+                        if package.get("name") == "opnsense" and package.get(
+                            "new_version"
+                        ):
+                            new_version = package.get("new_version")
+                            if isinstance(new_version, str):
+                                product_latest = new_version
                             break
 
             if status == "upgrade":
-                product_latest = dict_get(state, "firmware_update_info.upgrade_major_version")
+                raw_upgrade_version = dict_get(
+                    state, "firmware_update_info.upgrade_major_version"
+                )
+                product_latest = (
+                    raw_upgrade_version
+                    if isinstance(raw_upgrade_version, str)
+                    else None
+                )
                 if product_latest:
                     product_series = (
                         ".".join(product_latest.split(".")[:2])
                         if "." in product_latest
                         else product_latest
                     )
-        except (TypeError, KeyError, AttributeError):
+        except TypeError, KeyError, AttributeError:
             return None, None, None
         else:
             return product_version, product_latest, product_series
@@ -227,8 +271,12 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
         try:
             status = dict_get(state, "firmware_update_info.status")
             if status == "update":
-                product_name = dict_get(state, "firmware_update_info.product.product_name")
-                product_nickname = dict_get(state, "firmware_update_info.product.product_nickname")
+                product_name = dict_get(
+                    state, "firmware_update_info.product.product_name"
+                )
+                product_nickname = dict_get(
+                    state, "firmware_update_info.product.product_nickname"
+                )
                 status_msg = dict_get(state, "firmware_update_info.status_msg")
 
                 needs_reboot: bool = (
@@ -238,7 +286,9 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                 )
 
                 total_package_count: int = len(
-                    (dict_get(state, "firmware_update_info.all_packages", {}) or {}).keys()
+                    (
+                        dict_get(state, "firmware_update_info.all_packages", {}) or {}
+                    ).keys()
                 )
                 new_package_count: int = len(
                     dict_get(state, "firmware_update_info.new_packages", []) or []
@@ -266,7 +316,9 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 - upgraded packages: {upgrade_package_count}
 """
             if status == "upgrade":
-                product_name = dict_get(state, "firmware_update_info.product.product_name")
+                product_name = dict_get(
+                    state, "firmware_update_info.product.product_name"
+                )
                 status_msg = dict_get(state, "firmware_update_info.status_msg")
 
                 upgrade_needs_reboot: bool = (
@@ -282,7 +334,8 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
 
 - reboot needed: {upgrade_needs_reboot}
 """
-            return dict_get(state, "firmware_update_info.status_msg")
+            status_msg = dict_get(state, "firmware_update_info.status_msg")
+            return status_msg if isinstance(status_msg, str) else None
         except (TypeError, KeyError, AttributeError) as e:
             _LOGGER.error(
                 "Error getting release notes. %s: %s",
@@ -303,7 +356,7 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
         self, version: str | None = None, backup: bool = False, **kwargs: Any
     ) -> None:
         """Install an update."""
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             _LOGGER.error("Cannot update firmware, state data is missing")
             return

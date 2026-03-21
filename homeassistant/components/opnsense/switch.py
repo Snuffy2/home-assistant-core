@@ -35,7 +35,7 @@ PARALLEL_UPDATES = 0
 async def _compile_service_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile service switches from OPNsense state.
 
@@ -54,7 +54,9 @@ async def _compile_service_switches(
         A list of OPNsenseServiceSwitch entities.
 
     """
-    if not isinstance(state, MutableMapping) or not isinstance(state.get("services"), list):
+    if not isinstance(state, MutableMapping) or not isinstance(
+        state.get("services"), list
+    ):
         return []
 
     entities: list = []
@@ -82,7 +84,7 @@ async def _compile_service_switches(
 async def _compile_vpn_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile VPN switches from OPNsense state.
 
@@ -106,7 +108,9 @@ async def _compile_vpn_switches(
         for clients_servers in ("clients", "servers"):
             if not isinstance(state, MutableMapping):
                 return []
-            for uuid, instance in state.get(vpn_type, {}).get(clients_servers, {}).items():
+            for uuid, instance in (
+                state.get(vpn_type, {}).get(clients_servers, {}).items()
+            ):
                 if (
                     not isinstance(instance, MutableMapping)
                     or instance.get("enabled", None) is None
@@ -132,7 +136,7 @@ async def _compile_vpn_switches(
 async def _compile_unbound_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile Unbound blocklist switches from OPNsense state.
 
@@ -178,7 +182,7 @@ async def _compile_unbound_switches(
 async def _compile_firewall_rules_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile firewall rule switches from OPNsense state.
 
@@ -228,7 +232,7 @@ async def _compile_firewall_rules_switches(
 async def _compile_nat_source_rules_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile NAT source rule switches from OPNsense state.
 
@@ -273,7 +277,7 @@ async def _compile_nat_source_rules_switches(
 async def _compile_nat_destination_rules_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile NAT destination rule switches from OPNsense state.
 
@@ -318,7 +322,7 @@ async def _compile_nat_destination_rules_switches(
 async def _compile_nat_one_to_one_rules_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile NAT one-to-one rule switches from OPNsense state.
 
@@ -363,7 +367,7 @@ async def _compile_nat_one_to_one_rules_switches(
 async def _compile_nat_npt_rules_switches(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile NAT NPTv6 rule switches from OPNsense state.
 
@@ -422,8 +426,10 @@ async def async_setup_entry(
         Callback to add entities to Home Assistant.
 
     """
-    coordinator: OPNsenseDataUpdateCoordinator = getattr(config_entry.runtime_data, COORDINATOR)
-    state: dict[str, Any] = coordinator.data
+    coordinator: OPNsenseDataUpdateCoordinator = getattr(
+        config_entry.runtime_data, COORDINATOR
+    )
+    state: Any = coordinator.data
     if not isinstance(state, MutableMapping):
         _LOGGER.error("Missing state data in switch async_setup_entry")
         return
@@ -432,19 +438,35 @@ async def async_setup_entry(
     entities: list = []
 
     if config.get(CONF_SYNC_FIREWALL_AND_NAT, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_firewall_rules_switches(config_entry, coordinator, state))
-        entities.extend(await _compile_nat_source_rules_switches(config_entry, coordinator, state))
         entities.extend(
-            await _compile_nat_destination_rules_switches(config_entry, coordinator, state)
+            await _compile_firewall_rules_switches(config_entry, coordinator, state)
         )
-        entities.extend(await _compile_nat_one_to_one_rules_switches(config_entry, coordinator, state))
-        entities.extend(await _compile_nat_npt_rules_switches(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_nat_source_rules_switches(config_entry, coordinator, state)
+        )
+        entities.extend(
+            await _compile_nat_destination_rules_switches(
+                config_entry, coordinator, state
+            )
+        )
+        entities.extend(
+            await _compile_nat_one_to_one_rules_switches(
+                config_entry, coordinator, state
+            )
+        )
+        entities.extend(
+            await _compile_nat_npt_rules_switches(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_SERVICES, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_service_switches(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_service_switches(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_VPN, DEFAULT_SYNC_OPTION_VALUE):
         entities.extend(await _compile_vpn_switches(config_entry, coordinator, state))
     if config.get(CONF_SYNC_UNBOUND, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_unbound_switches(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_unbound_switches(config_entry, coordinator, state)
+        )
 
     _LOGGER.debug("[switch async_setup_entry] entities: %s", len(entities))
     async_add_entities(entities)
@@ -472,7 +494,9 @@ class OPNsenseSwitch(OPNsenseEntity, SwitchEntity):
 
         """
         name_suffix: str | None = (
-            entity_description.name if isinstance(entity_description.name, str) else None
+            entity_description.name
+            if isinstance(entity_description.name, str)
+            else None
         )
         unique_id_suffix: str | None = (
             entity_description.key if isinstance(entity_description.key, str) else None
@@ -562,7 +586,9 @@ class OPNsenseFirewallRuleSwitch(OPNsenseSwitch):
         )
         self._rule_id: str = self._opnsense_get_rule_id()
         _LOGGER.debug(
-            "[OPNsenseFirewallRuleSwitch init] Name: %s, rule_id: %s", self.name, self._rule_id
+            "[OPNsenseFirewallRuleSwitch init] Name: %s, rule_id: %s",
+            self.name,
+            self._rule_id,
         )
 
     def _opnsense_get_rule_id(self) -> str:
@@ -585,17 +611,25 @@ class OPNsenseFirewallRuleSwitch(OPNsenseSwitch):
             The rule data if available, None otherwise.
 
         """
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             return None
-        return state.get("firewall", {}).get("rules", {}).get(self._rule_id, None)
+        firewall = state.get("firewall")
+        if not isinstance(firewall, MutableMapping):
+            return None
+        rules = firewall.get("rules")
+        if not isinstance(rules, MutableMapping):
+            return None
+        rule = rules.get(self._rule_id)
+        return rule if isinstance(rule, MutableMapping) else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator update for the firewall rule switch."""
         if self.delay_update:
             _LOGGER.debug(
-                "Skipping coordinator update for firewall rule switch %s due to delay", self.name
+                "Skipping coordinator update for firewall rule switch %s due to delay",
+                self.name,
             )
             return
         rule = self._opnsense_get_rule()
@@ -605,7 +639,7 @@ class OPNsenseFirewallRuleSwitch(OPNsenseSwitch):
             return
         try:
             self._attr_is_on = bool(rule.get("enabled", "1") == "1")
-        except (TypeError, KeyError, AttributeError):
+        except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -738,31 +772,40 @@ class OPNsenseNATRuleSwitch(OPNsenseSwitch):
             The rule data if available, None otherwise.
 
         """
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             return None
-        return (
-            state.get("firewall", {})
-            .get("nat", {})
-            .get(self._nat_rule_type, {})
-            .get(self._rule_id, None)
-        )
+        firewall = state.get("firewall")
+        if not isinstance(firewall, MutableMapping):
+            return None
+        nat = firewall.get("nat")
+        if not isinstance(nat, MutableMapping):
+            return None
+        rule_group = nat.get(self._nat_rule_type)
+        if not isinstance(rule_group, MutableMapping):
+            return None
+        rule = rule_group.get(self._rule_id)
+        return rule if isinstance(rule, MutableMapping) else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator update for the NAT rule switch."""
         if self.delay_update:
-            _LOGGER.debug("Skipping coordinator update for NAT switch %s due to delay", self.name)
+            _LOGGER.debug(
+                "Skipping coordinator update for NAT switch %s due to delay", self.name
+            )
             return
         rule = self._opnsense_get_rule()
-        _LOGGER.debug("[OPNsenseNATRuleSwitch handle_coordinator_update] fetched rule: %s", rule)
+        _LOGGER.debug(
+            "[OPNsenseNATRuleSwitch handle_coordinator_update] fetched rule: %s", rule
+        )
         if not rule:
             self._available = False
             self.async_write_ha_state()
             return
         try:
             self._attr_is_on = bool(rule.get("enabled", "1") == "1")
-        except (TypeError, KeyError, AttributeError):
+        except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -833,7 +876,9 @@ class OPNsenseNATRuleSwitch(OPNsenseSwitch):
         """Turn the entity on."""
         if self._rule_id is None or not self._client:
             return
-        result = await self._client.toggle_nat_rule(self._nat_rule_type, self._rule_id, "on")
+        result = await self._client.toggle_nat_rule(
+            self._nat_rule_type, self._rule_id, "on"
+        )
         if result:
             _LOGGER.info("Turned on NAT rule: %s", self.name)
             self._attr_is_on = True
@@ -846,7 +891,9 @@ class OPNsenseNATRuleSwitch(OPNsenseSwitch):
         """Turn the entity off."""
         if self._rule_id is None or not self._client:
             return
-        result = await self._client.toggle_nat_rule(self._nat_rule_type, self._rule_id, "off")
+        result = await self._client.toggle_nat_rule(
+            self._nat_rule_type, self._rule_id, "off"
+        )
         if result:
             _LOGGER.info("Turned off NAT rule: %s", self.name)
             self._attr_is_on = False
@@ -924,12 +971,15 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
             The service data if available, None otherwise.
 
         """
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             return None
         service_id: str = self._opnsense_get_service_id()
         for service in state.get("services", []):
-            if service.get("id", None) == service_id:
+            if (
+                isinstance(service, MutableMapping)
+                and service.get("id", None) == service_id
+            ):
                 return service
         return None
 
@@ -938,22 +988,25 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
         """Handle coordinator update for the service switch."""
         if self.delay_update:
             _LOGGER.debug(
-                "Skipping coordinator update for service switch %s due to delay", self.name
+                "Skipping coordinator update for service switch %s due to delay",
+                self.name,
             )
             return
         self._service = self._opnsense_get_service()
         if not isinstance(self._service, MutableMapping):
             return
         try:
-            self._attr_is_on = self._service[self._prop_name]
-        except (TypeError, KeyError, AttributeError):
+            self._attr_is_on = bool(self._service[self._prop_name])
+        except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
             return
         self._available = True
         self._attr_extra_state_attributes = {}
         for attr in ("id", "name"):
-            self._attr_extra_state_attributes[f"service_{attr}"] = self._service.get(attr, None)
+            self._attr_extra_state_attributes[f"service_{attr}"] = self._service.get(
+                attr, None
+            )
         self.async_write_ha_state()
         # _LOGGER.debug(f"[OPNsenseServiceSwitch handle_coordinator_update] Name: {self.name}, available: {self.available}, is_on: {self.is_on}, extra_state_attributes: {self.extra_state_attributes}")
 
@@ -1035,12 +1088,14 @@ class OPNsenseUnboundBlocklistSwitch(OPNsenseSwitch):
                 self.name,
             )
             return
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
-        dnsbl = self.coordinator.data.get(ATTR_UNBOUND_BLOCKLIST, {}).get(self._uuid, {})
+        dnsbl = self.coordinator.data.get(ATTR_UNBOUND_BLOCKLIST, {}).get(
+            self._uuid, {}
+        )
         if not isinstance(dnsbl, MutableMapping) or len(dnsbl) == 0:
             self._available = False
             self.async_write_ha_state()
@@ -1123,23 +1178,27 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator update for the VPN switch."""
         if self.delay_update:
-            _LOGGER.debug("Skipping coordinator update for VPN switch %s due to delay", self.name)
+            _LOGGER.debug(
+                "Skipping coordinator update for VPN switch %s due to delay", self.name
+            )
             return
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
-        instance: dict[str, Any] = (
-            state.get(self._vpn_type, {}).get(self._clients_servers, {}).get(self._uuid, {})
+        instance: Any = (
+            state.get(self._vpn_type, {})
+            .get(self._clients_servers, {})
+            .get(self._uuid, {})
         )
         if not isinstance(instance, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
         try:
-            self._attr_is_on = instance["enabled"]
-        except (TypeError, KeyError, AttributeError):
+            self._attr_is_on = bool(instance["enabled"])
+        except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1166,7 +1225,7 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
                 "name",
                 "connected_servers",
                 "endpoint",
-                "iterface",
+                "interface",
                 "pubkey",
                 "tunnel_addresses",
                 "latest_handshake",

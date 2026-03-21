@@ -34,7 +34,9 @@ class OPNsenseBaseEntity(CoordinatorEntity[OPNsenseDataUpdateCoordinator]):
         self.coordinator: OPNsenseDataUpdateCoordinator = coordinator
         self._device_unique_id: str = config_entry.data[CONF_DEVICE_UNIQUE_ID]
         if unique_id_suffix:
-            self._attr_unique_id: str = slugify(f"{self._device_unique_id}_{unique_id_suffix}")
+            self._attr_unique_id: str = slugify(
+                f"{self._device_unique_id}_{unique_id_suffix}"
+            )
         if name_suffix:
             self._attr_name: str | None = name_suffix
         self._client: OPNsenseClient | None = None
@@ -45,7 +47,9 @@ class OPNsenseBaseEntity(CoordinatorEntity[OPNsenseDataUpdateCoordinator]):
     @property
     def available(self) -> bool:
         """Return whether entity is available."""
-        return getattr(self.coordinator, "last_update_success", True) and self._available
+        return (
+            getattr(self.coordinator, "last_update_success", True) and self._available
+        )
 
     @property
     def opnsense_device_name(self) -> str | None:
@@ -75,13 +79,14 @@ class OPNsenseEntity(OPNsenseBaseEntity):
     @property
     def device_info(self) -> DeviceInfo | None:
         """Device info for the firewall."""
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         model: str = "OPNsense"
         manufacturer: str = "Deciso B.V."
-        if state is None:
+        if not isinstance(state, dict):
             firmware: str | None = None
         else:
-            firmware = state.get("host_firmware_version")
+            firmware_value = state.get("host_firmware_version")
+            firmware = firmware_value if isinstance(firmware_value, str) else None
 
         device_info: DeviceInfo = {
             "identifiers": {(DOMAIN, self._device_unique_id)},

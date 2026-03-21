@@ -113,7 +113,9 @@ async def _resolve_vnstat_interface_descriptions(
         Interface identifier to description mapping used for sensor naming.
 
     """
-    descriptions = _build_interface_device_description_map(dict_get(state, "interfaces", {}) or {})
+    descriptions = _build_interface_device_description_map(
+        dict_get(state, "interfaces", {}) or {}
+    )
     if descriptions:
         return descriptions
 
@@ -192,7 +194,7 @@ async def _compile_static_certificate_sensors(
 async def _compile_vnstat_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile per-interface vnStat sensors."""
     if not isinstance(state, MutableMapping):
@@ -200,7 +202,9 @@ async def _compile_vnstat_sensors(
     vnstat_interfaces = dict_get(state, "vnstat.interfaces", {}) or {}
     if not isinstance(vnstat_interfaces, MutableMapping):
         return []
-    interface_descriptions = await _resolve_vnstat_interface_descriptions(config_entry, state)
+    interface_descriptions = await _resolve_vnstat_interface_descriptions(
+        config_entry, state
+    )
 
     metric_defs: dict[str, dict[str, Any]] = {
         "vnstat_today": {
@@ -229,7 +233,9 @@ async def _compile_vnstat_sensors(
     for interface_name in vnstat_interfaces:
         if not isinstance(interface_name, str):
             continue
-        interface_display_name = interface_descriptions.get(interface_name, interface_name)
+        interface_display_name = interface_descriptions.get(
+            interface_name, interface_name
+        )
         for metric_name, metric_def in metric_defs.items():
             entity = OPNsenseVnstatSensor(
                 config_entry=config_entry,
@@ -253,13 +259,15 @@ async def _compile_vnstat_sensors(
 async def _compile_speedtest_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     """Compile speedtest sensors from normalized coordinator state."""
     if not isinstance(state, MutableMapping):
         return []
     speedtest = state.get("speedtest")
-    if not isinstance(speedtest, MutableMapping) or not speedtest.get("available", False):
+    if not isinstance(speedtest, MutableMapping) or not speedtest.get(
+        "available", False
+    ):
         return []
 
     metric_definitions: tuple[tuple[str, str, Any, str], ...] = (
@@ -327,14 +335,16 @@ async def _compile_speedtest_sensors(
 async def _compile_filesystem_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
     entities: list = []
 
     for filesystem in dict_get(state, "telemetry.filesystems", []) or []:
-        filesystem_slug: str = slugify_filesystem_mountpoint(filesystem.get("mountpoint", None))
+        filesystem_slug: str = slugify_filesystem_mountpoint(
+            filesystem.get("mountpoint", None)
+        )
         enabled_default = False
         if filesystem_slug == "root":
             enabled_default = True
@@ -361,7 +371,7 @@ async def _compile_filesystem_sensors(
 async def _compile_carp_interface_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -389,7 +399,7 @@ async def _compile_carp_interface_sensors(
 async def _compile_interface_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -481,7 +491,7 @@ async def _compile_interface_sensors(
 async def _compile_gateway_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -529,7 +539,7 @@ async def _compile_gateway_sensors(
 async def _compile_temperature_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -560,7 +570,7 @@ async def _compile_temperature_sensors(
 async def _compile_dhcp_leases_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -608,7 +618,7 @@ async def _compile_dhcp_leases_sensors(
 async def _compile_vpn_sensors(
     config_entry: ConfigEntry,
     coordinator: OPNsenseDataUpdateCoordinator,
-    state: MutableMapping[str, Any],
+    state: Any,
 ) -> list:
     if not isinstance(state, MutableMapping):
         return []
@@ -636,7 +646,9 @@ async def _compile_vpn_sensors(
                     properties.append("connected_servers")
                 for prop_name in properties:
                     state_class: SensorStateClass | None = None
-                    native_unit_of_measurement: UnitOfDataRate | UnitOfInformation | None = None
+                    native_unit_of_measurement: (
+                        UnitOfDataRate | UnitOfInformation | None
+                    ) = None
                     device_class: SensorDeviceClass | None = None
                     enabled_default = False
                     suggested_display_precision = None
@@ -697,8 +709,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up the OPNsense sensors."""
 
-    coordinator: OPNsenseDataUpdateCoordinator = getattr(config_entry.runtime_data, COORDINATOR)
-    state: dict[str, Any] = coordinator.data
+    coordinator: OPNsenseDataUpdateCoordinator = getattr(
+        config_entry.runtime_data, COORDINATOR
+    )
+    state: Any = coordinator.data
     if not isinstance(state, MutableMapping):
         _LOGGER.error("Missing state data in sensor async_setup_entry")
         return
@@ -707,25 +721,43 @@ async def async_setup_entry(
     entities: list = []
 
     if config.get(CONF_SYNC_TELEMETRY, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_static_telemetry_sensors(config_entry, coordinator))
-        entities.extend(await _compile_filesystem_sensors(config_entry, coordinator, state))
-        entities.extend(await _compile_temperature_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_static_telemetry_sensors(config_entry, coordinator)
+        )
+        entities.extend(
+            await _compile_filesystem_sensors(config_entry, coordinator, state)
+        )
+        entities.extend(
+            await _compile_temperature_sensors(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_VNSTAT, DEFAULT_SYNC_OPTION_VALUE):
         entities.extend(await _compile_vnstat_sensors(config_entry, coordinator, state))
     if config.get(CONF_SYNC_SPEEDTEST, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_speedtest_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_speedtest_sensors(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_CERTIFICATES, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_static_certificate_sensors(config_entry, coordinator))
+        entities.extend(
+            await _compile_static_certificate_sensors(config_entry, coordinator)
+        )
     if config.get(CONF_SYNC_VPN, DEFAULT_SYNC_OPTION_VALUE):
         entities.extend(await _compile_vpn_sensors(config_entry, coordinator, state))
     if config.get(CONF_SYNC_GATEWAYS, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_gateway_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_gateway_sensors(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_INTERFACES, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_interface_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_interface_sensors(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_CARP, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_carp_interface_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_carp_interface_sensors(config_entry, coordinator, state)
+        )
     if config.get(CONF_SYNC_DHCP_LEASES, DEFAULT_SYNC_OPTION_VALUE):
-        entities.extend(await _compile_dhcp_leases_sensors(config_entry, coordinator, state))
+        entities.extend(
+            await _compile_dhcp_leases_sensors(config_entry, coordinator, state)
+        )
 
     _LOGGER.debug("[sensor async_setup_entry] entities: %s", len(entities))
     async_add_entities(entities)
@@ -760,7 +792,9 @@ class OPNsenseSensor(OPNsenseEntity, SensorEntity):
     ) -> None:
         """Initialize the sensor."""
         name_suffix: str | None = (
-            entity_description.name if isinstance(entity_description.name, str) else None
+            entity_description.name
+            if isinstance(entity_description.name, str)
+            else None
         )
         unique_id_suffix: str | None = (
             entity_description.key if isinstance(entity_description.key, str) else None
@@ -821,7 +855,9 @@ class OPNsenseStaticKeySensor(OPNsenseSensor):
             if isinstance(temp_attr, MutableMapping):
                 for k, v in temp_attr.items():
                     if k.startswith("usage_") and k != "usage_total":
-                        self._attr_extra_state_attributes[k.replace("usage_", "")] = f"{v}%"
+                        self._attr_extra_state_attributes[k.replace("usage_", "")] = (
+                            f"{v}%"
+                        )
                 # _LOGGER.debug(f"[extra_state_attributes] attributes: {attributes}")
         elif self.entity_description.key == "certificates":
             certs = self._get_opnsense_state_value(self.entity_description.key)
@@ -836,7 +872,7 @@ class OPNsenseVnstatSensor(OPNsenseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -849,7 +885,9 @@ class OPNsenseVnstatSensor(OPNsenseSensor):
             return
         _, interface_name, metric_name = key_parts
 
-        metric = dict_get(state, f"vnstat.interfaces.{interface_name}.metrics.{metric_name}", {})
+        metric = dict_get(
+            state, f"vnstat.interfaces.{interface_name}.metrics.{metric_name}", {}
+        )
         if not isinstance(metric, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -881,7 +919,7 @@ class OPNsenseSpeedtestSensor(OPNsenseSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator updates for speedtest sensors."""
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -927,7 +965,7 @@ class OPNsenseFilesystemSensor(OPNsenseSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         filesystem: dict[str, Any] = {}
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -945,7 +983,7 @@ class OPNsenseFilesystemSensor(OPNsenseSensor):
 
         try:
             self._attr_native_value = filesystem["used_pct"]
-        except (TypeError, KeyError, AttributeError):
+        except TypeError, KeyError, AttributeError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -965,7 +1003,7 @@ class OPNsenseInterfaceSensor(OPNsenseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -988,7 +1026,7 @@ class OPNsenseInterfaceSensor(OPNsenseSensor):
         prop_name: str = self._opnsense_get_interface_property_name()
         try:
             self._attr_native_value = interface[prop_name]
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1029,7 +1067,7 @@ class OPNsenseCarpInterfaceSensor(OPNsenseSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         carp_interface: dict[str, Any] = {}
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -1046,7 +1084,7 @@ class OPNsenseCarpInterfaceSensor(OPNsenseSensor):
 
         try:
             self._attr_native_value = carp_interface["status"]
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1081,7 +1119,7 @@ class OPNsenseGatewaySensor(OPNsenseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -1111,7 +1149,7 @@ class OPNsenseGatewaySensor(OPNsenseSensor):
                 return
 
             self._attr_native_value = value
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1138,7 +1176,7 @@ class OPNsenseVPNSensor(OPNsenseSensor):
     def _handle_coordinator_update(self) -> None:
         vpn_type: str = self.entity_description.key.split(".")[0]
         clients_servers: str = self.entity_description.key.split(".")[1]
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -1170,7 +1208,7 @@ class OPNsenseVPNSensor(OPNsenseSensor):
                 self._attr_native_value = "disabled"
             else:
                 self._attr_native_value = instance.get(prop_name)
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1212,7 +1250,7 @@ class OPNsenseVPNSensor(OPNsenseSensor):
                 "enabled",
                 "connected_servers",
                 "endpoint",
-                "iterface",
+                "interface",
                 "pubkey",
                 "tunnel_addresses",
                 "latest_handshake",
@@ -1260,14 +1298,16 @@ class OPNsenseTempSensor(OPNsenseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
         sensor_temp_device: str = self.entity_description.key.split(".")[2]
         temp: dict[str, Any] = {}
-        for temp_device, temp_temp in state.get("telemetry", {}).get("temps", {}).items():
+        for temp_device, temp_temp in (
+            state.get("telemetry", {}).get("temps", {}).items()
+        ):
             if temp_device == sensor_temp_device:
                 temp = temp_temp
                 break
@@ -1278,7 +1318,7 @@ class OPNsenseTempSensor(OPNsenseSensor):
 
         try:
             self._attr_native_value = temp["temperature"]
-        except (TypeError, KeyError, ZeroDivisionError):
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -1297,7 +1337,7 @@ class OPNsenseDHCPLeasesSensor(OPNsenseSensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
@@ -1321,7 +1361,9 @@ class OPNsenseDHCPLeasesSensor(OPNsenseSensor):
             try:
                 for ifn, if_descr in lease_interfaces.items():
                     if_count: int = sum(
-                        1 for d in leases.get(ifn, []) if d.get("address") not in {None, ""}
+                        1
+                        for d in leases.get(ifn, [])
+                        if d.get("address") not in {None, ""}
                     )
                     lease_counts[if_descr] = f"{if_count} leases"
                     total_lease_count += if_count
@@ -1330,7 +1372,7 @@ class OPNsenseDHCPLeasesSensor(OPNsenseSensor):
                         if_descr,
                         if_count,
                     )
-            except (TypeError, KeyError, ZeroDivisionError):
+            except TypeError, KeyError, ZeroDivisionError:
                 self._available = False
                 self.async_write_ha_state()
                 return
@@ -1350,7 +1392,7 @@ class OPNsenseDHCPLeasesSensor(OPNsenseSensor):
                 self._attr_native_value = sum(
                     1 for d in interface if d.get("address") not in {None, ""}
                 )
-            except (TypeError, KeyError, ZeroDivisionError):
+            except TypeError, KeyError, ZeroDivisionError:
                 self._available = False
                 self.async_write_ha_state()
                 return

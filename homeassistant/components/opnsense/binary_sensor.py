@@ -35,7 +35,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up the OPNsense binary sensors."""
 
-    coordinator: OPNsenseDataUpdateCoordinator = getattr(config_entry.runtime_data, COORDINATOR)
+    coordinator: OPNsenseDataUpdateCoordinator = getattr(
+        config_entry.runtime_data, COORDINATOR
+    )
     config: Mapping[str, Any] = config_entry.data
 
     entities: list = []
@@ -83,7 +85,9 @@ class OPNsenseBinarySensor(OPNsenseEntity, BinarySensorEntity):
     ) -> None:
         """Initialize OPNsense Binary Sensor entity."""
         name_suffix: str | None = (
-            entity_description.name if isinstance(entity_description.name, str) else None
+            entity_description.name
+            if isinstance(entity_description.name, str)
+            else None
         )
         unique_id_suffix: str | None = (
             entity_description.key if isinstance(entity_description.key, str) else None
@@ -103,14 +107,14 @@ class OPNsenseCarpStatusBinarySensor(OPNsenseBinarySensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
         try:
-            self._attr_is_on = state["carp_status"]
-        except (TypeError, KeyError, ZeroDivisionError):
+            self._attr_is_on = bool(state["carp_status"])
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return
@@ -124,14 +128,14 @@ class OPNsensePendingNoticesPresentBinarySensor(OPNsenseBinarySensor):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        state: dict[str, Any] = self.coordinator.data
+        state: Any = self.coordinator.data
         if not isinstance(state, MutableMapping):
             self._available = False
             self.async_write_ha_state()
             return
         try:
-            self._attr_is_on = state["notices"]["pending_notices_present"]
-        except (TypeError, KeyError, ZeroDivisionError):
+            self._attr_is_on = bool(state["notices"]["pending_notices_present"])
+        except TypeError, KeyError, ZeroDivisionError:
             self._available = False
             self.async_write_ha_state()
             return

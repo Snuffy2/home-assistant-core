@@ -72,7 +72,7 @@ def is_valid_mac_address(mac: str) -> bool:
     return normalize_mac_address(mac) is not None
 
 
-def normalize_mac_address(mac: str) -> str | None:
+def normalize_mac_address(mac: object) -> str | None:
     """Normalize MAC addresses to lowercase colon-separated format.
 
     Parameters
@@ -115,7 +115,9 @@ def _get_device_tracking_mode(
     """
     if not device_tracker_enabled:
         return DEVICE_TRACKING_MODE_DISABLED
-    return DEVICE_TRACKING_MODE_SELECTED if selected_devices else DEVICE_TRACKING_MODE_ALL
+    return (
+        DEVICE_TRACKING_MODE_SELECTED if selected_devices else DEVICE_TRACKING_MODE_ALL
+    )
 
 
 def _parse_manual_devices(manual_devices: str | None) -> list[str]:
@@ -168,7 +170,9 @@ def _merge_selected_devices(*device_groups: Iterable[str]) -> list[str]:
     return list(ordered_devices)
 
 
-def _apply_device_tracking_mode(options: MutableMapping[str, Any], tracking_mode: str) -> None:
+def _apply_device_tracking_mode(
+    options: MutableMapping[str, Any], tracking_mode: str
+) -> None:
     """Apply UI tracking mode to persisted options.
 
     Parameters
@@ -184,7 +188,9 @@ def _apply_device_tracking_mode(options: MutableMapping[str, Any], tracking_mode
         This function mutates ``options`` in place.
 
     """
-    options[CONF_DEVICE_TRACKER_ENABLED] = tracking_mode != DEVICE_TRACKING_MODE_DISABLED
+    options[CONF_DEVICE_TRACKER_ENABLED] = (
+        tracking_mode != DEVICE_TRACKING_MODE_DISABLED
+    )
     if tracking_mode == DEVICE_TRACKING_MODE_ALL:
         options[CONF_DEVICES] = []
 
@@ -330,7 +336,10 @@ async def validate_input(
 
     try:
         await _handle_user_input(
-            hass=hass, user_input=user_input, config_step=config_step, expected_id=expected_id
+            hass=hass,
+            user_input=user_input,
+            config_step=config_step,
+            expected_id=expected_id,
         )
     except BelowMinFirmware:
         _log_and_set_error(
@@ -440,7 +449,9 @@ async def _clean_and_parse_url(user_input: MutableMapping[str, Any]) -> None:
     _LOGGER.debug("[config_flow] Cleaned URL: %s", user_input[CONF_URL])
 
 
-async def _get_client(user_input: MutableMapping[str, Any], hass: HomeAssistant) -> OPNsenseClient:
+async def _get_client(
+    user_input: MutableMapping[str, Any], hass: HomeAssistant
+) -> OPNsenseClient:
     """Create and return the OPNsense client."""
     return OPNsenseClient(
         url=user_input[CONF_URL],
@@ -476,11 +487,17 @@ async def _handle_user_input(
     client: OPNsenseClient = await _get_client(user_input, hass)
 
     user_input[CONF_FIRMWARE_VERSION] = await client.get_host_firmware_version()
-    _LOGGER.debug("[handle_user_input] Firmware Version: %s", user_input[CONF_FIRMWARE_VERSION])
+    _LOGGER.debug(
+        "[handle_user_input] Firmware Version: %s", user_input[CONF_FIRMWARE_VERSION]
+    )
 
     try:
         _validate_firmware_version(user_input[CONF_FIRMWARE_VERSION])
-    except (awesomeversion.exceptions.AwesomeVersionCompareException, TypeError, ValueError) as e:
+    except (
+        awesomeversion.exceptions.AwesomeVersionCompareException,
+        TypeError,
+        ValueError,
+    ) as e:
         raise UnknownFirmware from e
 
     await client.set_use_snake_case(initial=True)
@@ -491,14 +508,20 @@ async def _handle_user_input(
     if not user_input.get(CONF_NAME):
         user_input[CONF_NAME] = system_info.get("name") or "OPNsense"
 
-    user_input[CONF_DEVICE_UNIQUE_ID] = await client.get_device_unique_id(expected_id=expected_id)
-    _LOGGER.debug("[handle_user_input] Device Unique ID: %s", user_input[CONF_DEVICE_UNIQUE_ID])
+    user_input[CONF_DEVICE_UNIQUE_ID] = await client.get_device_unique_id(
+        expected_id=expected_id
+    )
+    _LOGGER.debug(
+        "[handle_user_input] Device Unique ID: %s", user_input[CONF_DEVICE_UNIQUE_ID]
+    )
 
     if not user_input.get(CONF_DEVICE_UNIQUE_ID):
         raise MissingDeviceUniqueID
 
 
-def _log_and_set_error(errors: MutableMapping[str, Any], key: str, message: str) -> None:
+def _log_and_set_error(
+    errors: MutableMapping[str, Any], key: str, message: str
+) -> None:
     """Log the error and set it in the errors dictionary."""
     _LOGGER.error(message)
     errors["base"] = key
@@ -517,7 +540,8 @@ def _build_user_input_schema(
     schema = vol.Schema(
         {
             vol.Required(
-                CONF_URL, default=user_input.get(CONF_URL, fallback.get(CONF_URL, "https://"))
+                CONF_URL,
+                default=user_input.get(CONF_URL, fallback.get(CONF_URL, "https://")),
             ): str,
             vol.Optional(
                 CONF_VERIFY_SSL,
@@ -539,13 +563,16 @@ def _build_user_input_schema(
         schema = schema.extend(
             {
                 vol.Optional(
-                    CONF_NAME, default=user_input.get(CONF_NAME, fallback.get(CONF_NAME, ""))
+                    CONF_NAME,
+                    default=user_input.get(CONF_NAME, fallback.get(CONF_NAME, "")),
                 ): str,
                 vol.Required(
                     CONF_GRANULAR_SYNC_OPTIONS,
                     default=user_input.get(
                         CONF_GRANULAR_SYNC_OPTIONS,
-                        fallback.get(CONF_GRANULAR_SYNC_OPTIONS, DEFAULT_GRANULAR_SYNC_OPTIONS),
+                        fallback.get(
+                            CONF_GRANULAR_SYNC_OPTIONS, DEFAULT_GRANULAR_SYNC_OPTIONS
+                        ),
                     ),
                 ): selector.BooleanSelector(selector.BooleanSelectorConfig()),
             }
@@ -632,7 +659,8 @@ def _build_options_init_schema(
                 default=user_input.get(
                     CONF_DEVICE_TRACKER_SCAN_INTERVAL,
                     fallback_options.get(
-                        CONF_DEVICE_TRACKER_SCAN_INTERVAL, DEFAULT_DEVICE_TRACKER_SCAN_INTERVAL
+                        CONF_DEVICE_TRACKER_SCAN_INTERVAL,
+                        DEFAULT_DEVICE_TRACKER_SCAN_INTERVAL,
                     ),
                 ),
             ): vol.All(vol.Coerce(int), vol.Clamp(min=30, max=300)),
@@ -641,7 +669,8 @@ def _build_options_init_schema(
                 default=user_input.get(
                     CONF_DEVICE_TRACKER_CONSIDER_HOME,
                     fallback_options.get(
-                        CONF_DEVICE_TRACKER_CONSIDER_HOME, DEFAULT_DEVICE_TRACKER_CONSIDER_HOME
+                        CONF_DEVICE_TRACKER_CONSIDER_HOME,
+                        DEFAULT_DEVICE_TRACKER_CONSIDER_HOME,
                     ),
                 ),
             ): vol.All(vol.Coerce(int), vol.Clamp(min=0, max=3600)),
@@ -649,7 +678,9 @@ def _build_options_init_schema(
                 CONF_GRANULAR_SYNC_OPTIONS,
                 default=user_input.get(
                     CONF_GRANULAR_SYNC_OPTIONS,
-                    fallback_config.get(CONF_GRANULAR_SYNC_OPTIONS, DEFAULT_GRANULAR_SYNC_OPTIONS),
+                    fallback_config.get(
+                        CONF_GRANULAR_SYNC_OPTIONS, DEFAULT_GRANULAR_SYNC_OPTIONS
+                    ),
                 ),
             ): selector.BooleanSelector(selector.BooleanSelectorConfig()),
         }
@@ -676,8 +707,12 @@ def _build_device_tracker_schema(
     """
     return vol.Schema(
         {
-            vol.Optional(CONF_DEVICES, default=selected_devices): cv.multi_select(dict(dt_entries)),
-            vol.Optional(CONF_MANUAL_DEVICES): selector.TextSelector(selector.TextSelectorConfig()),
+            vol.Optional(CONF_DEVICES, default=selected_devices): cv.multi_select(
+                dict(dt_entries)
+            ),
+            vol.Optional(CONF_MANUAL_DEVICES): selector.TextSelector(
+                selector.TextSelectorConfig()
+            ),
         }
     )
 
@@ -870,7 +905,9 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_import(self, user_input: MutableMapping[str, Any]) -> ConfigFlowResult:
+    async def async_step_import(
+        self, user_input: MutableMapping[str, Any]
+    ) -> ConfigFlowResult:
         """Handle import."""
         options = dict(user_input.pop(IMPORT_OPTIONS_KEY, {}))
         errors = await validate_input(
@@ -890,7 +927,9 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
             options=options,
         )
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
         """Handle reauthentication."""
         return await self.async_step_reauth_confirm()
 
@@ -1011,7 +1050,9 @@ class OPNsenseOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=_build_options_init_schema(
-                user_input=user_input, fallback_config=self._config, fallback_options=self._options
+                user_input=user_input,
+                fallback_config=self._config,
+                fallback_options=self._options,
             ),
             errors=errors,
         )
@@ -1044,7 +1085,9 @@ class OPNsenseOptionsFlow(OptionsFlow):
                 )
                 if tracking_mode == DEVICE_TRACKING_MODE_SELECTED:
                     return await self.async_step_device_tracker()
-                _LOGGER.debug("Updating options from granular sync. user_input: %s", self._config)
+                _LOGGER.debug(
+                    "Updating options from granular sync. user_input: %s", self._config
+                )
 
                 self._options.pop(CONF_DEVICE_TRACKING_MODE, None)
                 self.hass.config_entries.async_update_entry(
@@ -1081,7 +1124,9 @@ class OPNsenseOptionsFlow(OptionsFlow):
 
         """
         errors: dict[str, Any] = {}
-        selected_devices: list[str] = _merge_selected_devices(self._options.get(CONF_DEVICES, []))
+        selected_devices: list[str] = _merge_selected_devices(
+            self._options.get(CONF_DEVICES, [])
+        )
         if user_input is not None:
             self._options.update(
                 {
@@ -1108,7 +1153,9 @@ class OPNsenseOptionsFlow(OptionsFlow):
 
         try:
             dt_entries: dict[str, Any] = await _get_dt_entries(
-                hass=self.hass, config=self.config_entry.data, selected_devices=selected_devices
+                hass=self.hass,
+                config=self.config_entry.data,
+                selected_devices=selected_devices,
             )
         except (aiohttp.ClientError, TimeoutError, OSError) as err:
             _LOGGER.warning("Failed to load device tracker entries: %s", err)
