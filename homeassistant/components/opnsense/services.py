@@ -271,7 +271,6 @@ async def _get_clients(
         return []
     first_entry_id = next(iter(hass.data[DOMAIN]))
     if len(hass.data[DOMAIN]) == 1:
-        # _LOGGER.debug(f"[get_clients] Only 1 entry. entry_id: {first_entry_id}")
         return [hass.data[DOMAIN][first_entry_id]]
 
     entry_ids: list = []
@@ -281,7 +280,6 @@ async def _get_clients(
         except TypeError, AttributeError, HomeAssistantError:
             pass
         else:
-            # _LOGGER.debug(f"[get_clients] device_id: {opndevice_id}, device_entry: {device_entry}")
             if device_entry and device_entry.primary_config_entry not in entry_ids:
                 entry_ids.append(device_entry.primary_config_entry)
     if opnentity_id:
@@ -290,11 +288,9 @@ async def _get_clients(
         except TypeError, AttributeError, HomeAssistantError:
             pass
         else:
-            # _LOGGER.debug(f"[get_clients] entity_id: {opnentity_id}, entity_entry: {entity_entry}")
             if entity_entry and entity_entry.config_entry_id not in entry_ids:
                 entry_ids.append(entity_entry.config_entry_id)
     clients: list = []
-    # _LOGGER.debug(f"[get_clients] entry_ids: {entry_ids}")
     for entry_id, opnsense_client in hass.data[DOMAIN].items():
         if len(entry_ids) == 0 or entry_id in entry_ids:
             clients.append(opnsense_client)

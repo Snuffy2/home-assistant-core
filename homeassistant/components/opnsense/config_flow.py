@@ -331,9 +331,6 @@ async def validate_input(
     expected_id: str | None = None,
 ) -> dict[str, Any]:
     """Check user input for errors."""
-    # filtered_user_input: MutableMapping[str, Any] = {key: value for key, value in user_input.items() if key != CONF_PASSWORD}
-    # _LOGGER.debug("[validate_input] user_input: %s", filtered_user_input)
-
     try:
         await _handle_user_input(
             hass=hass,
@@ -834,9 +831,7 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the step for initial granular sync options."""
         errors: dict[str, Any] = {}
         if user_input is not None:
-            # _LOGGER.debug("[config_flow granular_sync] raw user_input: %s", user_input)
             self._config.update(user_input)
-            # _LOGGER.debug("[config_flow granular_sync] merged config: %s", self._config)
             errors = await validate_input(
                 hass=self.hass,
                 user_input=self._config,
@@ -868,9 +863,7 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
         self._config = dict(reconfigure_entry.data)
 
         if user_input is not None:
-            # _LOGGER.debug("[config_flow reconfigure] raw user_input: %s", user_input)
             self._config.update(user_input)
-            # _LOGGER.debug("[config_flow reconfigure] merged config: %s", self._config)
             errors = await validate_input(
                 hass=self.hass,
                 user_input=self._config,
@@ -880,7 +873,6 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
             if not errors:
-                # https://developers.home-assistant.io/docs/config_entries_config_flow_handler#unique-ids
                 await self.async_set_unique_id(self._config.get(CONF_DEVICE_UNIQUE_ID))
                 self._abort_if_unique_id_mismatch()
 
@@ -1063,9 +1055,7 @@ class OPNsenseOptionsFlow(OptionsFlow):
         """Handle the step for granular sync options."""
         errors: dict[str, Any] = {}
         if user_input is not None:
-            # _LOGGER.debug("[options_flow granular_sync] raw user_input: %s", user_input)
             self._config.update(user_input)
-            # _LOGGER.debug("[options_flow granular_sync] merged user_input. config: %s. options: %s", self._config, self._options)
             errors = await validate_input(
                 hass=self.hass,
                 user_input=self._config,

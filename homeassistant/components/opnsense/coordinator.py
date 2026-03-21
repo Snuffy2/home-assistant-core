@@ -255,7 +255,6 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                 self._state.get("device_unique_id"),
                 self._device_unique_id,
             )
-            # Create repair task here
             return {}
         restapi_count, exec_php_count = await self._client.get_query_counts()
         _LOGGER.debug(

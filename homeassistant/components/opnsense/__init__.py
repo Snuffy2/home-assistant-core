@@ -114,12 +114,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         The configuration entry for the OPNsense integration.
 
     """
-    # _LOGGER.debug("[async_update_listener] entry: %s", entry.as_dict())
     if getattr(entry.runtime_data, SHOULD_RELOAD, True):
         _LOGGER.info("[async_update_listener] Reloading")
 
         uid_prefix = entry.unique_id
-        # _LOGGER.debug("[async_update_listener] uid_prefix: %s", uid_prefix)
         removal_prefixes: list[str] = []
         for item, prefix in GRANULAR_SYNC_PREFIX.items():
             if not entry.data.get(item, DEFAULT_SYNC_OPTION_VALUE):
@@ -130,7 +128,6 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
         for ent in er.async_entries_for_config_entry(
             registry=entity_registry, config_entry_id=entry.entry_id
         ):
-            # _LOGGER.debug("[async_update_listener] ent: %s", ent)
             for pre in removal_prefixes:
                 if ent.unique_id.startswith(f"{uid_prefix}_{pre}"):
                     _LOGGER.debug(
@@ -148,7 +145,6 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
             devices = dr.async_entries_for_config_entry(
                 registry=device_registry, config_entry_id=entry.entry_id
             )
-            # _LOGGER.debug("[async_update_listener] devices: %s", devices)
             for device in devices:
                 if device.via_device_id:
                     _LOGGER.debug(
@@ -247,7 +243,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     config: Mapping[str, Any] = entry.data
     options: Mapping[str, Any] = entry.options
-    # _LOGGER.debug("[async_setup_entry] entry: %s", entry.as_dict())
 
     url: str = config[CONF_URL]
     username: str = config[CONF_USERNAME]

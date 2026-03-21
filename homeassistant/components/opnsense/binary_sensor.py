@@ -51,7 +51,6 @@ async def async_setup_entry(
                     translation_key="carp_status",
                     name="CARP Status",
                     device_class=None,
-                    # entity_category=entity_category,
                     entity_registry_enabled_default=False,
                 ),
             )
@@ -66,7 +65,6 @@ async def async_setup_entry(
                     translation_key="pending_notices_present",
                     name="Pending Notices Present",
                     device_class=BinarySensorDeviceClass.PROBLEM,
-                    # entity_category=entity_category,
                     entity_registry_enabled_default=True,
                 ),
             ),

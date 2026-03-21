@@ -927,7 +927,6 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
         )
         self._service: MutableMapping[str, Any] | None = None
         self._prop_name: str = self._opnsense_get_property_name()
-        # _LOGGER.debug(f"[OPNsenseServiceSwitch init] Name: {self.name}, prop_name: {self._prop_name}")
 
     def _opnsense_get_property_name(self) -> str:
         """Get the property name from the entity description.
@@ -998,7 +997,6 @@ class OPNsenseServiceSwitch(OPNsenseSwitch):
                 attr, None
             )
         self.async_write_ha_state()
-        # _LOGGER.debug(f"[OPNsenseServiceSwitch handle_coordinator_update] Name: {self.name}, available: {self.available}, is_on: {self.is_on}, extra_state_attributes: {self.extra_state_attributes}")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
@@ -1097,7 +1095,6 @@ class OPNsenseUnboundBlocklistSwitch(OPNsenseSwitch):
             "Return NXDOMAIN": bool(dnsbl.get("nxdomain", "0") == "1"),
         }
         self.async_write_ha_state()
-        # _LOGGER.debug(f"[OPNsenseUnboundBlocklistSwitch handle_coordinator_update] Name: {self.name}, available: {self.available}, is_on: {self.is_on}, extra_state_attributes: {self.extra_state_attributes}")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
@@ -1155,7 +1152,6 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
         self._vpn_type = self.entity_description.key.split(".")[0]
         self._clients_servers = self.entity_description.key.split(".")[1]
         self._uuid = self.entity_description.key.split(".")[2]
-        # _LOGGER.debug(f"[OPNsenseVPNSwitch init] Name: {self.name}")
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -1222,7 +1218,6 @@ class OPNsenseVPNSwitch(OPNsenseSwitch):
             if instance.get(attr):
                 self._attr_extra_state_attributes[attr] = instance.get(attr)
         self.async_write_ha_state()
-        # _LOGGER.debug(f"[OPNsenseVPNSwitch handle_coordinator_update] Name: {self.name}, available: {self.available}, is_on: {self.is_on}, extra_state_attributes: {self.extra_state_attributes}")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the VPN switch.

@@ -21,7 +21,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import slugify
 from homeassistant.util.dt import utc_from_timestamp
 
@@ -560,7 +560,6 @@ async def _compile_temperature_sensors(
                 suggested_display_precision=1,
                 suggested_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 entity_registry_enabled_default=True,
-                # entity_category=entity_category,
             ),
         )
         entities.append(entity)
@@ -695,7 +694,6 @@ async def _compile_vpn_sensors(
                             suggested_display_precision=suggested_display_precision,
                             suggested_unit_of_measurement=suggested_unit_of_measurement,
                             entity_registry_enabled_default=enabled_default,
-                            # entity_category=entity_category,
                         ),
                     )
                     entities.append(entity)
@@ -705,7 +703,7 @@ async def _compile_vpn_sensors(
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the OPNsense sensors."""
 
@@ -852,14 +850,12 @@ class OPNsenseStaticKeySensor(OPNsenseSensor):
         self._attr_extra_state_attributes = {}
         if self.entity_description.key == "telemetry.cpu.usage_total":
             temp_attr = self._get_opnsense_state_value("telemetry.cpu")
-            # _LOGGER.debug(f"[extra_state_attributes] temp_attr: {temp_attr}")
             if isinstance(temp_attr, MutableMapping):
                 for k, v in temp_attr.items():
                     if k.startswith("usage_") and k != "usage_total":
                         self._attr_extra_state_attributes[k.replace("usage_", "")] = (
                             f"{v}%"
                         )
-                # _LOGGER.debug(f"[extra_state_attributes] attributes: {attributes}")
         elif self.entity_description.key == "certificates":
             certs = self._get_opnsense_state_value(self.entity_description.key)
             if isinstance(certs, MutableMapping):
@@ -1334,7 +1330,7 @@ class OPNsenseTempSensor(OPNsenseSensor):
         self._available = True
 
         self._attr_extra_state_attributes = {}
-        for attr in ["device_id"]:
+        for attr in ("device_id",):
             self._attr_extra_state_attributes[attr] = temp.get(attr, None)
         self.async_write_ha_state()
 
@@ -1353,12 +1349,9 @@ class OPNsenseDHCPLeasesSensor(OPNsenseSensor):
             return
         state = raw_state
         if_name: str = self.entity_description.key.split(".")[1].strip()
-        # _LOGGER.debug(f"[OPNsenseDHCPLeasesSensor handle_coordinator_update] if_name: {if_name}")
         if if_name.lower() == "all":
             leases = state.get("dhcp_leases", {}).get("leases", {})
             lease_interfaces = state.get("dhcp_leases", {}).get("lease_interfaces", {})
-            # _LOGGER.debug(f"[OPNsenseDHCPLeasesSensor handle_coordinator_update] lease_interfaces: {lease_interfaces}")
-            # _LOGGER.debug(f"[OPNsenseDHCPLeasesSensor handle_coordinator_update] leases: {leases}")
             if not isinstance(leases, MutableMapping) or not isinstance(
                 lease_interfaces, MutableMapping
             ):

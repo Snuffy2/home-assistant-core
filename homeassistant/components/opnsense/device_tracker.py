@@ -97,11 +97,6 @@ async def async_setup_entry(
             hostname=device.get("hostname", None),
         )
         entities.append(entity)
-    # _LOGGER.debug(
-    #     "[device_tracker async_setup_entry] mac_addresses: %s, previous_mac_addresses: %s",
-    #     mac_addresses,
-    #     previous_mac_addresses,
-    # )
     # Get the MACs that need to be removed and remove their devices
     for mac_address in list(set(previous_mac_addresses) - set(mac_addresses)):
         rem_device = dev_reg.async_get_device(
@@ -325,15 +320,6 @@ class OPNsenseScannerEntity(OPNsenseBaseEntity, ScannerEntity, RestoreEntity):
             )
 
         self.async_write_ha_state()
-        # _LOGGER.debug(
-        #     f"[OPNsenseScannerEntity handle_coordinator_update] Name: {self.name}, "
-        #     f"unique_id: {self.unique_id}, attr_unique_id: {self._attr_unique_id}, "
-        #     f"available: {self.available}, is_connected: {self.is_connected}, "
-        #     f"hostname: {self.hostname}, ip_address: {self.ip_address}, "
-        #     f"last_known_hostname: {self._last_known_hostname}, last_known_ip: {self._last_known_ip}, "
-        #     f"last_known_connected_time: {self._last_known_connected_time}, icon: {self.icon}, "
-        #     f"extra_state_atrributes: {self.extra_state_attributes}"
-        # )
 
     @property  # type: ignore[misc] # overriding final from ScannerEntity
     def device_info(self) -> DeviceInfo | None:
