@@ -34,8 +34,8 @@ rules:
   test-coverage: done
 
   # Gold
-  devices: todo
-  diagnostics: todo
+  devices: done
+  diagnostics: done
   discovery-update-info: todo
   discovery: todo
   docs-data-update: todo
@@ -47,16 +47,16 @@ rules:
   docs-use-cases: todo
   dynamic-devices: todo
   entity-category: todo
-  entity-device-class: todo
-  entity-disabled-by-default: todo
+  entity-device-class: done
+  entity-disabled-by-default: done
   entity-translations: todo
   exception-translations: todo
-  icon-translations: todo
-  reconfiguration-flow: todo
-  repair-issues: todo
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues: done
   stale-devices: todo
 
   # Platinum
-  async-dependency: todo
-  inject-websession: todo
+  async-dependency: done
+  inject-websession: done
   strict-typing: todo
