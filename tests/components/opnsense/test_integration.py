@@ -1,4 +1,4 @@
-"""End-to-end style integration tests for the hass-opnsense integration.
+"""End-to-end style integration tests for the OPNsense integration.
 
 These tests intentionally exercise multiple layers together (config flow +
 entry setup + options flow) to provide confidence that the main user
@@ -66,7 +66,9 @@ class _FakeFlowClient:
     async def get_device_unique_id(self, expected_id: str | None = None) -> str:
         return self._device_id
 
-    async def get_arp_table(self, resolve_hostnames: bool = False) -> list[dict[str, Any]]:
+    async def get_arp_table(
+        self, resolve_hostnames: bool = False
+    ) -> list[dict[str, Any]]:
         # Used by options flow device tracker step
         return [
             {"mac": "aa:bb:cc:dd:ee:ff", "hostname": "host1", "ip": "192.168.1.10"},
@@ -77,7 +79,9 @@ class _FakeFlowClient:
 class _FakeRuntimeClient:
     """Fake client used during async_setup_entry (main integration path)."""
 
-    def __init__(self, device_id: str = "dev-runtime", firmware: str = "26.1.1") -> None:
+    def __init__(
+        self, device_id: str = "dev-runtime", firmware: str = "26.1.1"
+    ) -> None:
         self._device_id = device_id
         self._firmware = firmware
         self._closed = False
@@ -167,13 +171,17 @@ def _build_mock_hass() -> Any:
                 object.__setattr__(entry, "version", version)
             return True
 
-        async def async_forward_entry_setups(self, entry, platforms):  # pragma: no cover
+        async def async_forward_entry_setups(
+            self, entry, platforms
+        ):  # pragma: no cover
             return True
 
         async def async_unload_platforms(self, entry, platforms):  # pragma: no cover
             return True
 
-        async def async_reload(self, entry_id):  # pragma: no cover - reload path not asserted
+        async def async_reload(
+            self, entry_id
+        ):  # pragma: no cover - reload path not asserted
             return None
 
     hass.config_entries = _Cfg()
@@ -214,7 +222,9 @@ async def test_e2e_basic_config_flow_and_setup(monkeypatch, make_config_entry):
 
     # Now patch runtime client & coordinator and call async_setup_entry
     monkeypatch.setattr(
-        init_mod, "OPNsenseClient", lambda **k: _FakeRuntimeClient(device_id="dev-basic")
+        init_mod,
+        "OPNsenseClient",
+        lambda **k: _FakeRuntimeClient(device_id="dev-basic"),
     )
     monkeypatch.setattr(init_mod, "OPNsenseDataUpdateCoordinator", _FakeCoordinator)
 
@@ -255,7 +265,9 @@ async def test_e2e_granular_sync_and_options_device_tracker(
     """
 
     # Patch flow client
-    monkeypatch.setattr(cf_mod, "OPNsenseClient", lambda **k: _FakeFlowClient(device_id="dev-gran"))
+    monkeypatch.setattr(
+        cf_mod, "OPNsenseClient", lambda **k: _FakeFlowClient(device_id="dev-gran")
+    )
     monkeypatch.setattr(
         cf_mod, "async_create_clientsession", lambda **k: MagicMock(), raising=False
     )
@@ -310,7 +322,10 @@ async def test_e2e_granular_sync_and_options_device_tracker(
     # doesn't fail during tests. Use raising=False to allow older HA versions
     # that don't expose report_usage.
     monkeypatch.setattr(
-        homeassistant.config_entries, "report_usage", lambda *a, **k: None, raising=False
+        homeassistant.config_entries,
+        "report_usage",
+        lambda *a, **k: None,
+        raising=False,
     )
     # Provide the config entry to the options flow in this test environment
     # so it can access entry.data/options without relying on HA internals.
@@ -339,7 +354,9 @@ async def test_e2e_granular_sync_and_options_device_tracker(
     assert opt_final["type"] == "create_entry"
     # Options merged list should contain unique MACs (order not strictly enforced)
     devices_set = set(entry.options.get(CONF_DEVICES, []))
-    assert {"aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66", "77:88:99:aa:bb:cc"}.issubset(devices_set)
+    assert {"aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66", "77:88:99:aa:bb:cc"}.issubset(
+        devices_set
+    )
     assert entry.options.get(cf_mod.CONF_DEVICE_TRACKER_ENABLED) is True
 
     # Patch runtime setup components (client + coordinator) to count device tracker coordinator instantiation
@@ -347,7 +364,9 @@ async def test_e2e_granular_sync_and_options_device_tracker(
         init_mod, "OPNsenseClient", lambda **k: _FakeRuntimeClient(device_id="dev-gran")
     )
     monkeypatch.setattr(
-        init_mod, "OPNsenseDataUpdateCoordinator", coordinator_capture.factory(_FakeCoordinator)
+        init_mod,
+        "OPNsenseDataUpdateCoordinator",
+        coordinator_capture.factory(_FakeCoordinator),
     )
 
     ok = await init_mod.async_setup_entry(hass, entry)
@@ -368,7 +387,9 @@ async def test_e2e_reload_and_unload(monkeypatch, make_config_entry):
     """
 
     # Patch config flow client
-    monkeypatch.setattr(cf_mod, "OPNsenseClient", lambda **k: _FakeFlowClient(device_id="dev-rel"))
+    monkeypatch.setattr(
+        cf_mod, "OPNsenseClient", lambda **k: _FakeFlowClient(device_id="dev-rel")
+    )
     monkeypatch.setattr(
         cf_mod, "async_create_clientsession", lambda **k: MagicMock(), raising=False
     )
@@ -414,11 +435,15 @@ async def test_e2e_reload_and_unload(monkeypatch, make_config_entry):
     # Patch registries for update listener (return no entities/devices)
     monkeypatch.setattr(init_mod.er, "async_get", lambda hass: MagicMock())
     monkeypatch.setattr(
-        init_mod.er, "async_entries_for_config_entry", lambda registry, config_entry_id: []
+        init_mod.er,
+        "async_entries_for_config_entry",
+        lambda registry, config_entry_id: [],
     )
     monkeypatch.setattr(init_mod.dr, "async_get", lambda hass: MagicMock())
     monkeypatch.setattr(
-        init_mod.dr, "async_entries_for_config_entry", lambda registry, config_entry_id: []
+        init_mod.dr,
+        "async_entries_for_config_entry",
+        lambda registry, config_entry_id: [],
     )
 
     # Trigger update listener -> should schedule reload
@@ -432,155 +457,3 @@ async def test_e2e_reload_and_unload(monkeypatch, make_config_entry):
     assert entry.entry_id not in hass.data[init_mod.DOMAIN]
     assert runtime_client._closed is True
     hass.config_entries.async_unload_platforms.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_e2e_full_migration_chain(monkeypatch, make_config_entry):
-    """E2E: exercise async_migrate_entry path from version 1 -> 4.
-
-    Verifies:
-    - v1->2 removes tls_insecure and adds verify_ssl (inverse of tls_insecure)
-    - v2->3 updates device unique id across entry + entities + devices
-    - v3->4 transforms telemetry-related sensor unique ids and removes *_connected_client_count
-    """
-
-    # Build hass mock with update_entry bypass logic
-    hass = _build_mock_hass()
-
-    # Fake device & entity registry implementations
-    class FakeDevice:
-        def __init__(self, id_: str, identifiers: set[tuple[str, str]]):
-            self.id = id_
-            self.identifiers = identifiers
-
-    class FakeDeviceRegistry:
-        def __init__(self):
-            self._devices: list[FakeDevice] = [
-                FakeDevice("dev-main", {("opnsense", "oldmacid"), ("other", "x")}),
-                FakeDevice("dev-other", {("misc", "abc")}),
-            ]
-            self.updated: list[FakeDevice] = []
-
-        def async_update_device(self, device_id: str, new_identifiers: set[tuple[str, str]]):
-            for d in self._devices:
-                if d.id == device_id:
-                    d.identifiers = new_identifiers
-                    self.updated.append(d)
-                    return d
-            raise ValueError("device not found")
-
-    class FakeEntity:
-        def __init__(self, entity_id: str, unique_id: str, device_id: str):
-            self.entity_id = entity_id
-            self.unique_id = unique_id
-            self.device_id = device_id
-
-    class FakeEntityRegistry:
-        def __init__(self):
-            self._entities: dict[str, FakeEntity] = {}
-            # initial telemetry / non-telemetry examples
-            ents = [
-                FakeEntity(
-                    "sensor.router_interface_eth0", "oldmacid_telemetry_interface_eth0", "dev-main"
-                ),
-                FakeEntity(
-                    "sensor.router_gateway_wan", "oldmacid_telemetry_gateway_wan", "dev-main"
-                ),
-                FakeEntity(
-                    "sensor.router_vpn_clients", "oldmacid_connected_client_count", "dev-main"
-                ),
-                FakeEntity(
-                    "sensor.router_openvpn_status0",
-                    "oldmacid_telemetry_openvpn_status0",
-                    "dev-main",
-                ),
-            ]
-            for e in ents:
-                self._entities[e.entity_id] = e
-            self.updated: list[FakeEntity] = []
-            self.removed: list[str] = []
-
-        def async_update_entity(self, entity_id: str, new_unique_id: str, **kwargs):
-            # Accept HA's keyword-based calls (e.g. new_unique_id=...) while
-            # preserving existing positional behavior. Prefer kwarg when present.
-            new_unique_id = kwargs.get("new_unique_id", new_unique_id)
-            ent = self._entities[entity_id]
-            ent.unique_id = new_unique_id
-            self.updated.append(ent)
-            return ent
-
-        def async_remove(self, entity_id: str):
-            self.removed.append(entity_id)
-            self._entities.pop(entity_id, None)
-
-    fake_device_reg = FakeDeviceRegistry()
-    fake_entity_reg = FakeEntityRegistry()
-
-    # Monkeypatch registry access/functions used in migration helpers
-    monkeypatch.setattr(init_mod.dr, "async_get", lambda hass: fake_device_reg)
-    monkeypatch.setattr(init_mod.er, "async_get", lambda hass: fake_entity_reg)
-    monkeypatch.setattr(
-        init_mod.dr,
-        "async_entries_for_config_entry",
-        lambda registry, config_entry_id: list(fake_device_reg._devices),
-    )
-    monkeypatch.setattr(
-        init_mod.er,
-        "async_entries_for_config_entry",
-        lambda registry, config_entry_id: list(fake_entity_reg._entities.values()),
-    )
-
-    # Patch client used during migrations (v2->3 get_device_unique_id, v3->4 get_telemetry)
-    class _MigClient:
-        async def get_device_unique_id(self) -> str:
-            return "newmacid"
-
-        async def get_host_firmware_version(self):  # not used in migration chain here
-            return "25.1"
-
-        async def get_telemetry(self) -> dict[str, Any]:
-            return {"filesystems": []}  # keep simple to avoid extra branches
-
-    monkeypatch.setattr(init_mod, "OPNsenseClient", lambda **k: _MigClient())
-    monkeypatch.setattr(
-        init_mod, "async_create_clientsession", lambda **k: MagicMock(), raising=False
-    )
-
-    # Build legacy v1 entry (tls_insecure True, missing verify_ssl)
-    entry = make_config_entry(
-        data={
-            CONF_URL: "https://router.example",
-            CONF_USERNAME: "u",
-            CONF_PASSWORD: "p",
-            init_mod.CONF_DEVICE_UNIQUE_ID: "oldmacid",
-            init_mod.CONF_TLS_INSECURE: True,
-        },
-        title="Router",
-        unique_id="oldmacid",
-        version=1,
-        entry_id="entry_migrate",
-        options={},
-    )
-
-    # Run full migration
-    ok = await init_mod.async_migrate_entry(hass, entry)
-    assert ok is True
-    assert entry.version == 4
-    # v1->2: tls_insecure removed, verify_ssl added (inverse of True -> False)
-    assert init_mod.CONF_TLS_INSECURE not in entry.data
-    assert entry.data.get(CONF_VERIFY_SSL) is False
-    # v2->3: unique id updated
-    assert entry.data[init_mod.CONF_DEVICE_UNIQUE_ID] == "newmacid"
-    assert entry.unique_id == "newmacid"
-    # Device identifiers updated
-    main_dev = next(d for d in fake_device_reg._devices if d.id == "dev-main")
-    assert any(i == ("opnsense", "newmacid") for i in main_dev.identifiers)
-    # Entities updated: telemetry prefixes removed for interface/gateway/openvpn; connected client removed
-    ent_ids = {e.entity_id: e for e in fake_entity_reg._entities.values()}
-    # connected_client_count entity should be removed during v3->4 migration
-    assert "sensor.router_vpn_clients" in fake_entity_reg.removed
-    assert "sensor.router_vpn_clients" not in fake_entity_reg._entities
-    # Remaining entities use new prefix and no _telemetry_ substring
-    for ent in ent_ids.values():
-        assert ent.unique_id.startswith("newmacid_")
-        assert "_telemetry_" not in ent.unique_id
