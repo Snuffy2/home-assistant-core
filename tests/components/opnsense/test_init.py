@@ -13,24 +13,10 @@ import homeassistant.helpers.aiohttp_client as _hc
 init_mod = importlib.import_module("homeassistant.components.opnsense")
 
 
-@pytest.fixture
-def ignore_missing_translations(request):
-    """Ignore repair issue translation checks for the specific setup tests that raise them."""
-    ignored = {
-        "test_async_setup_entry_device_id_mismatch": [
-            "component.opnsense.issues.device_id_mismatched.title",
-            "component.opnsense.issues.device_id_mismatched.description",
-        ],
-        "test_async_setup_entry_firmware_below_min": [
-            "component.opnsense.issues.below_min_firmware.title",
-            "component.opnsense.issues.below_min_firmware.description",
-        ],
-    }
-    return ignored.get(getattr(request.node, "originalname", request.node.name), [])
-
-
 @pytest.fixture(autouse=True)
-def _patch_hass_async_create_clientsession(monkeypatch):
+def _patch_hass_async_create_clientsession(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Autouse fixture to stub Home Assistant's async_create_clientsession.
 
     Some tests use a minimal `hass` object (SimpleNamespace) which does not
@@ -78,13 +64,13 @@ def _patch_hass_async_create_clientsession(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_success(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """async_setup_entry should succeed with valid client and coordinator."""
     monkeypatch.setattr(init_mod, "OPNsenseClient", fake_client())
     # use shared coordinator capture fixture
@@ -121,13 +107,13 @@ async def test_async_setup_entry_success(
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_device_id_mismatch(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """async_setup_entry should fail when client reports mismatched device id."""
     monkeypatch.setattr(init_mod, "OPNsenseClient", fake_client(device_id="other"))
     # use shared coordinator capture fixture
@@ -161,7 +147,9 @@ async def test_async_setup_entry_device_id_mismatch(
 
 
 @pytest.mark.asyncio
-async def test_async_update_listener_not_reload(monkeypatch, make_config_entry):
+async def test_async_update_listener_not_reload(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """_async_update_listener should set SHOULD_RELOAD True and not call reload when flag False."""
     entry = make_config_entry(entry_id="e", unique_id="u")
     # ensure runtime_data exists and set SHOULD_RELOAD to False
@@ -179,7 +167,9 @@ async def test_async_update_listener_not_reload(monkeypatch, make_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_remove_config_entry_device_branches(monkeypatch, hass):
+async def test_async_remove_config_entry_device_branches(
+    monkeypatch: pytest.MonkeyPatch, hass: HomeAssistant
+) -> None:
     """Verify removal logic for config entry device registry branches."""
     device = MagicMock()
     device.via_device_id = True
@@ -211,7 +201,9 @@ async def test_async_remove_config_entry_device_branches(monkeypatch, hass):
 
 
 @pytest.mark.asyncio
-async def test_async_remove_config_entry_device_no_linked_entities(monkeypatch):
+async def test_async_remove_config_entry_device_no_linked_entities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When no linked entities exist for a device, removal should succeed (return True)."""
     # device not linked via via_device_id and has an id
     device = MagicMock()
@@ -235,7 +227,7 @@ async def test_async_remove_config_entry_device_no_linked_entities(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_unload_entry_and_pop(ph_hass, make_config_entry):
+async def test_async_unload_entry_and_pop(ph_hass, make_config_entry) -> None:
     """async_unload_entry removes entry from hass.data and closes the client."""
     entry = make_config_entry(entry_id="e_unload")
     entry.as_dict = lambda: {"id": "x"}
@@ -257,8 +249,8 @@ async def test_async_unload_entry_and_pop(ph_hass, make_config_entry):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("should_raise", [False, True])
 async def test_async_setup_calls_services_and_handles_exceptions(
-    monkeypatch, ph_hass, should_raise
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass, should_raise
+) -> None:
     """async_setup should call async_setup_services; exceptions should propagate."""
     if should_raise:
         mock_services = AsyncMock(side_effect=RuntimeError("fail"))
@@ -279,8 +271,8 @@ async def test_async_setup_calls_services_and_handles_exceptions(
 
 @pytest.mark.asyncio
 async def test_async_setup_imports_legacy_yaml_with_reduced_defaults(
-    monkeypatch, ph_hass
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass
+) -> None:
     """Legacy YAML import should create a config flow with telemetry-only defaults."""
     mock_services = AsyncMock(return_value=None)
     async_init = AsyncMock(return_value={"type": "create_entry"})
@@ -325,8 +317,8 @@ async def test_async_setup_imports_legacy_yaml_with_reduced_defaults(
 
 @pytest.mark.asyncio
 async def test_async_update_listener_reload_and_remove(
-    monkeypatch, ph_hass, make_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch, ph_hass, make_config_entry
+) -> None:
     """When SHOULD_RELOAD True and sync disabled, update listener schedules reload and removes entities."""
     # Prepare entry with SHOULD_RELOAD True and granular sync option disabled to force removal_prefixes
     entry = make_config_entry(
@@ -345,7 +337,7 @@ async def test_async_update_listener_reload_and_remove(
 
     # construct an entity that should be removed by unique_id prefix
     class Ent:
-        def __init__(self, entity_id, unique_id):
+        def __init__(self, entity_id: str, unique_id: str) -> None:
             self.entity_id = entity_id
             self.unique_id = unique_id
 
@@ -400,8 +392,13 @@ async def test_async_update_listener_reload_and_remove(
     ],
 )
 async def test_async_update_listener_device_removal_param(
-    monkeypatch, ph_hass, make_config_entry, dt_enabled, via_device_id, expect_removed
-):
+    monkeypatch: pytest.MonkeyPatch,
+    ph_hass,
+    make_config_entry,
+    dt_enabled,
+    via_device_id,
+    expect_removed,
+) -> None:
     """Parameterized: ensure devices are removed only when device tracker disabled and via_device_id is True."""
     # create an entry with the device tracker option set per parameter
     entry = make_config_entry(
@@ -451,13 +448,13 @@ async def test_async_update_listener_device_removal_param(
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_firmware_below_min(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """async_setup_entry returns False for devices with firmware below minimum supported."""
     # fake client where device id matches but firmware is below min
     monkeypatch.setattr(init_mod, "OPNsenseClient", fake_client(firmware_version="1.0"))
@@ -487,22 +484,22 @@ async def test_async_setup_entry_firmware_below_min(
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_awesomeversion_exception(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """async_setup_entry should continue when AwesomeVersion comparison raises an exception."""
 
     # fake client where device id matches but awesomeversion comparison raises
     # monkeypatch AwesomeVersion to a class that raises on comparison
     class DummyAV:
-        def __init__(self, v):
+        def __init__(self, v) -> None:
             self.v = v
 
-        def __lt__(self, other):
+        def __lt__(self, other) -> bool:
             raise init_mod.awesomeversion.exceptions.AwesomeVersionCompareException
 
     monkeypatch.setattr(init_mod, "OPNsenseClient", fake_client())
@@ -529,7 +526,7 @@ async def test_async_setup_entry_awesomeversion_exception(
 
 
 @pytest.mark.asyncio
-async def test_async_unload_entry_unload_fails(ph_hass, make_config_entry):
+async def test_async_unload_entry_unload_fails(ph_hass, make_config_entry) -> None:
     """async_unload_entry returns False and retains hass.data when platform unload fails."""
     entry = make_config_entry(entry_id="e_unload_fail")
     entry.as_dict = lambda: {"id": "x"}
@@ -551,13 +548,13 @@ async def test_async_unload_entry_unload_fails(ph_hass, make_config_entry):
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_delete_uses_min_issue_id(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """async_setup_entry removes the stale below-min repair once firmware is supported."""
     firmware_str = "26.1.1"
     monkeypatch.setattr(
@@ -595,13 +592,13 @@ async def test_async_setup_entry_delete_uses_min_issue_id(
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_with_device_tracker_enabled(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     ph_hass,
     coordinator_capture,
     fake_client,
     fake_coordinator,
     make_config_entry,
-):
+) -> None:
     """Device tracker option creates a device-tracker coordinator and triggers initial refresh."""
     monkeypatch.setattr(init_mod, "OPNsenseClient", fake_client())
     monkeypatch.setattr(

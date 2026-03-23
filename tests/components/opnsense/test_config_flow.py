@@ -541,7 +541,6 @@ async def test_handle_user_input_unknown_firmware_and_missing_device_id(
 
     fake_client = MagicMock()
     fake_client.get_host_firmware_version = AsyncMock(return_value="not-a-version")
-    fake_client.set_use_snake_case = AsyncMock()
     fake_client.get_system_info = AsyncMock(return_value={})
     fake_client.get_device_unique_id = AsyncMock(return_value=None)
 

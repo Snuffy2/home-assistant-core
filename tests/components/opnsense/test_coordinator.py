@@ -366,33 +366,6 @@ async def test_async_update_data_reentrancy_and_full_flow(
 
 
 @pytest.mark.asyncio
-async def test_async_setup_calls_client_set_use_snake_case(
-    monkeypatch: pytest.MonkeyPatch, make_config_entry, fake_client
-) -> None:
-    """Coordinator setup invokes client set_use_snake_case when appropriate."""
-    called = {"count": 0}
-
-    async def fake_set_use_snake_case():
-        called["count"] += 1
-
-    entry = make_config_entry()
-    client = fake_client()()
-    client.set_use_snake_case = fake_set_use_snake_case
-    coord = OPNsenseDataUpdateCoordinator(
-        hass=MagicMock(),
-        client=client,
-        name="n",
-        update_interval=timedelta(seconds=1),
-        device_unique_id="id",
-        config_entry=entry,
-    )
-
-    # call the async setup which should call the client's set_use_snake_case
-    await coord._async_setup()
-    assert called["count"] == 1
-
-
-@pytest.mark.asyncio
 async def test_calculate_speed_bytes_case() -> None:
     """Calculate byte-rate conversion yields kilobytes_per_second."""
     # bytes branch should return kilobytes_per_second label
@@ -718,7 +691,7 @@ async def test_async_update_dt_data_device_id_branches(
     monkeypatch.setattr(coord, "_get_states", fake_get_states)
 
     # spy on client's get_query_counts
-    client.get_query_counts = AsyncMock(return_value=(3, 4))
+    client.get_query_counts = AsyncMock(return_value=3)
 
     res = await coord._async_update_dt_data()
 

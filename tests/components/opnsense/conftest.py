@@ -590,7 +590,7 @@ def fake_client():
 
                 # state for query counts used by coordinator tests
                 self._query_counts_reset = False
-                self._query_counts = (1, 1)
+                self._query_counts = 1
 
             async def get_device_unique_id(self, expected_id: str | None = None):
                 return self._device_id
@@ -603,9 +603,6 @@ def fake_client():
 
             async def get_telemetry(self):
                 return self._telemetry
-
-            async def set_use_snake_case(self):
-                return True
 
             async def reset_query_counts(self):
                 # mark reset and return None (used by coordinator)
@@ -711,9 +708,6 @@ def fake_flow_client():
 
             async def get_host_firmware_version(self) -> str:
                 return self._firmware
-
-            async def set_use_snake_case(self, initial: bool = False) -> None:
-                return None
 
             async def get_system_info(self) -> dict:
                 return {"name": "OPNsense"}

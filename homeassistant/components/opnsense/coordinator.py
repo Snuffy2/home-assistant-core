@@ -82,7 +82,6 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
             "DT " if self._device_tracker_coordinator else "",
         )
         # await self._client.get_host_firmware_version() # Already triggered in __init__.py async_setup_entry
-        await self._client.set_use_snake_case()
 
     async def _get_states(self, categories: list) -> dict[str, Any]:
         state: dict[str, Any] = {}
@@ -256,12 +255,8 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
                 self._device_unique_id,
             )
             return {}
-        restapi_count, exec_php_count = await self._client.get_query_counts()
-        _LOGGER.debug(
-            "DT Update Complete. REST API Queries: %s, exec_php Queries: %s",
-            restapi_count,
-            exec_php_count,
-        )
+        query_count = await self._client.get_query_counts()
+        _LOGGER.debug("DT Update Complete. API Queries: %s", query_count)
         return self._state
 
     async def _calculate_vpn_speeds(self, elapsed_time: float) -> None:
@@ -395,12 +390,8 @@ class OPNsenseDataUpdateCoordinator(DataUpdateCoordinator):
 
             await self._calculate_entity_speeds()
 
-            restapi_count, exec_php_count = await self._client.get_query_counts()
-            _LOGGER.debug(
-                "Update Complete. REST API Queries: %s, exec_php Queries: %s",
-                restapi_count,
-                exec_php_count,
-            )
+            query_count = await self._client.get_query_counts()
+            _LOGGER.debug("Update Complete. API Queries: %s", query_count)
         except Exception as err:
             raise UpdateFailed(f"Failed to refresh OPNsense data: {err}") from err
         else:

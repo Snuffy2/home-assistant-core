@@ -497,8 +497,6 @@ async def _handle_user_input(
     ) as e:
         raise UnknownFirmware from e
 
-    await client.set_use_snake_case(initial=True)
-
     system_info: dict[str, Any] = await client.get_system_info()
     _LOGGER.debug("[handle_user_input] system_info: %s", system_info)
 

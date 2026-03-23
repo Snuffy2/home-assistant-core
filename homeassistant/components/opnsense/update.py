@@ -121,13 +121,6 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
         )
 
         product_class = self._get_product_class(product_series)
-        _LOGGER.debug(
-            "[Update handle_coordinator_update] product_version: %s, product_latest: %s, product_series: %s, product_class: %s",
-            product_version,
-            product_latest,
-            product_series,
-            product_class,
-        )
 
         if product_series and product_latest and product_class:
             self._attr_release_url = f"https://github.com/opnsense/changelog/blob/master/{product_class}/{product_series}/{product_latest.split('+')[0].split('_')[0]}"
@@ -136,9 +129,6 @@ class OPNsenseFirmwareUpdatesAvailableUpdate(OPNsenseUpdate):
                 self.config_entry.data.get("url", None) + "/ui/core/firmware#changelog"
             )
 
-        _LOGGER.debug(
-            "[Update handle_coordinator_update] release_url: %s", self._attr_release_url
-        )
         self._release_notes = self._get_release_notes(
             state, product_latest, product_version
         )

@@ -56,10 +56,6 @@ class _FakeFlowClient:
     async def get_host_firmware_version(self) -> str:
         return self._firmware
 
-    async def set_use_snake_case(self, initial: bool = False) -> None:
-        """No-op used by config flow validation path."""
-        return
-
     async def get_system_info(self) -> MutableMapping[str, Any]:
         return {"name": "OPNsenseTest"}
 
@@ -98,19 +94,13 @@ class _FakeRuntimeClient:
         self._closed = True
         return True
 
-    async def set_use_snake_case(
-        self, initial: bool = False
-    ) -> None:  # called during coordinator _async_setup
-        # Accept the optional `initial` flag like the production client. No-op for tests.
-        return None
-
     async def reset_query_counts(self) -> None:
         return None
 
-    async def get_query_counts(self) -> tuple[int, int]:
-        return (0, 0)
+    async def get_query_counts(self) -> int:
+        return 0
 
-    async def get_system_info(self):  # first refresh path
+    async def get_system_info(self) -> MutableMapping[str, Any]:  # first refresh path
         return {"name": "sys"}
 
 
@@ -184,13 +174,18 @@ def _build_mock_hass() -> Any:
         ):  # pragma: no cover - reload path not asserted
             return None
 
+        def async_get_known_entry(self, entry_id: str) -> Any | None:
+            return self._entries.get(entry_id)
+
     hass.config_entries = _Cfg()
     hass.async_create_task = MagicMock(side_effect=asyncio.create_task)
     return hass
 
 
 @pytest.mark.asyncio
-async def test_e2e_basic_config_flow_and_setup(monkeypatch, make_config_entry):
+async def test_e2e_basic_config_flow_and_setup(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """E2E: basic config flow (single step) followed by entry setup."""
 
     # Patch client for config flow
@@ -253,8 +248,8 @@ async def test_e2e_basic_config_flow_and_setup(monkeypatch, make_config_entry):
 
 @pytest.mark.asyncio
 async def test_e2e_granular_sync_and_options_device_tracker(
-    monkeypatch, make_config_entry, coordinator_capture
-):
+    monkeypatch: pytest.MonkeyPatch, make_config_entry, coordinator_capture
+) -> None:
     """E2E: multi-step config flow (granular sync) + options enabling device tracker list.
 
     Validates:
@@ -307,9 +302,7 @@ async def test_e2e_granular_sync_and_options_device_tracker(
 
     # Add to fake hass store so options flow update calls can mutate it
     hass.data.setdefault(init_mod.DOMAIN, {})
-    # Provide async_get_known_entry for options flow compatibility
-    if not hasattr(hass.config_entries, "async_get_known_entry"):
-        hass.config_entries.async_get_known_entry = lambda entry_id: entry
+    hass.config_entries._entries[entry.entry_id] = entry
 
     # Options flow path
     opt_flow = cf_mod.OPNsenseConfigFlow.async_get_options_flow(
@@ -377,7 +370,9 @@ async def test_e2e_granular_sync_and_options_device_tracker(
 
 
 @pytest.mark.asyncio
-async def test_e2e_reload_and_unload(monkeypatch, make_config_entry):
+async def test_e2e_reload_and_unload(
+    monkeypatch: pytest.MonkeyPatch, make_config_entry
+) -> None:
     """E2E: validate update-listener triggered reload and full unload cleanup.
 
     Steps:

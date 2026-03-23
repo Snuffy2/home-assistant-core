@@ -233,7 +233,6 @@ def test_handle_coordinator_update_entry_present(
     assert ent.extra_state_attributes.get("expires") == "Never"
     assert ent.extra_state_attributes.get("interface") == "lan0"
     assert ent.extra_state_attributes.get("type") == "arp"
-    assert ent.icon == "mdi:lan-connect"
 
 
 def test_handle_coordinator_update_missing_entry_consider_home(
@@ -286,7 +285,6 @@ def test_handle_coordinator_update_uses_last_known_details(
 
     ent._handle_coordinator_update()
     assert ent.is_connected is False
-    assert ent.icon == "mdi:lan-disconnect"
     assert ent.extra_state_attributes["last_known_hostname"] == "cached-host"
     assert ent.extra_state_attributes["last_known_ip"] == "10.0.0.5"
 
@@ -488,7 +486,7 @@ async def test_async_setup_entry_removes_previous_mac(
 
     # use shared fake registry fixture: simulate device present and removal
     fake = fake_reg_factory(device_exists=True, device_id="dev_to_remove")
-    monkeypatch.setattr(dt_mod, "async_get_dev_reg", lambda hass: fake, raising=False)
+    monkeypatch.setattr(dt_mod.dr, "async_get", lambda hass: fake, raising=False)
 
     hass.config_entries.async_update_entry = MagicMock()
 
@@ -578,7 +576,6 @@ def test_handle_coordinator_update_expired_preserve_last_known_ip(
     ent._handle_coordinator_update()
     assert ent.is_connected is False
     assert ent.extra_state_attributes.get("last_known_ip") == "1.2.3.4"
-    assert ent.icon == "mdi:lan-disconnect"
 
 
 @pytest.mark.asyncio

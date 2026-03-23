@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "loggers": ["aiopnsense"],
   "quality_scale": "silver",
-  "requirements": ["aiopnsense==0.1.0"]
+  "requirements": ["aiopnsense==1.0.2"]
 }

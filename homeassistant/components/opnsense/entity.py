@@ -68,7 +68,7 @@ class OPNsenseBaseEntity(CoordinatorEntity[OPNsenseDataUpdateCoordinator]):
         if self._client is None:
             self._client = getattr(self.config_entry.runtime_data, OPNSENSE_CLIENT)
         if self._client is None:
-            _LOGGER.error("Unable to get client in async_added_to_hass.")
+            _LOGGER.error("Unable to get client in async_added_to_hass")
         assert self._client is not None
         self._handle_coordinator_update()
 

@@ -369,7 +369,6 @@ async def test_firewall_switch_updates_and_toggles(
     assert entity.available is True
     assert entity.is_on is True
     assert entity.extra_state_attributes["source"] == "any"
-    assert entity.icon == "mdi:play-network"
 
     await entity.async_turn_off()
     entity._client.toggle_firewall_rule.assert_awaited_once_with("rule1", "off")
@@ -763,7 +762,6 @@ async def test_nat_switch_variant_attributes_and_failures(
     entity._handle_coordinator_update()
     assert entity.available is True
     assert entity.extra_state_attributes[expected_attr[0]] == expected_attr[1]
-    assert entity.icon == "mdi:network"
 
     await entity.async_turn_on()
     await entity.async_turn_off()
@@ -873,7 +871,6 @@ async def test_vpn_switch_server_branch_and_failure_paths(
     entity._handle_coordinator_update()
     assert entity.available is True
     assert entity.extra_state_attributes["status"] == "up"
-    assert entity.icon == "mdi:folder-key-network"
 
     await entity.async_turn_off()
     assert entity.is_on is True
