@@ -73,6 +73,7 @@ from .const import (
 from .coordinator import OPNsenseDataUpdateCoordinator
 from .helpers import is_private_ip
 from .models import OPNsenseData
+from .services import async_setup_services
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -247,6 +248,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         Always returns True to indicate successful setup.
 
     """
+    await async_setup_services(hass)
     if DOMAIN in config:
         legacy_config = config[DOMAIN]
         hass.async_create_task(
