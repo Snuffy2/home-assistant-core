@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping
+import ipaddress
 import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
 
-from pyopnsense import diagnostics
-from pyopnsense.exceptions import APIException
+import aiohttp
+from aiopnsense import OPNsenseClient
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_API_KEY, CONF_URL, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .const import CONF_API_SECRET, CONF_TRACKER_INTERFACES, DOMAIN, INTEGRATION_TITLE
@@ -35,6 +37,18 @@ def _title_from_url(url: str) -> str:
     """Create an entry title from URL."""
     parsed = urlparse(url)
     return parsed.hostname or INTEGRATION_TITLE
+
+
+def _is_private_ip(url: str) -> bool:
+    """Return True when URL host is a private IP address."""
+    host = urlparse(url).hostname
+    if not host:
+        return False
+
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False
 
 
 def _normalize_tracker_interfaces(value: Any) -> list[str]:
@@ -95,6 +109,29 @@ def _build_user_schema(user_input: Mapping[str, Any] | None = None) -> vol.Schem
     )
 
 
+def _extract_interface_names(raw_interfaces: Any) -> list[str]:
+    """Extract interface display names from aiopnsense payload."""
+    if not isinstance(raw_interfaces, Mapping):
+        return []
+
+    names: list[str] = []
+    for value in raw_interfaces.values():
+        if isinstance(value, str) and value:
+            names.append(value)
+            continue
+
+        if not isinstance(value, Mapping):
+            continue
+
+        for key in ("name", "description", "if", "interface", "intf_description"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate:
+                names.append(candidate)
+                break
+
+    return list(dict.fromkeys(names))
+
+
 async def _async_validate_input(
     hass: HomeAssistant, user_input: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -104,43 +141,32 @@ async def _async_validate_input(
         user_input.get(CONF_TRACKER_INTERFACES)
     )
 
-    client = diagnostics.InterfaceClient(
-        data[CONF_API_KEY],
-        data[CONF_API_SECRET],
-        data[CONF_URL],
-        data.get(CONF_VERIFY_SSL, False),
-        timeout=20,
+    client = OPNsenseClient(
+        url=data[CONF_URL],
+        username=data[CONF_API_KEY],
+        password=data[CONF_API_SECRET],
+        session=async_create_clientsession(
+            hass=hass,
+            raise_for_status=False,
+            cookie_jar=aiohttp.CookieJar(unsafe=_is_private_ip(data[CONF_URL])),
+        ),
+        opts={"verify_ssl": data.get(CONF_VERIFY_SSL, False)},
     )
 
     try:
-        await hass.async_add_executor_job(client.get_arp)
-    except APIException as err:
+        await client.get_arp_table(resolve_hostnames=True)
+
+        tracker_interfaces: list[str] = data[CONF_TRACKER_INTERFACES]
+        if tracker_interfaces:
+            interface_names = _extract_interface_names(await client.get_interfaces())
+            for interface in tracker_interfaces:
+                if interface not in interface_names:
+                    raise InvalidTrackerInterface
+    except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
         _LOGGER.debug("Failed to validate OPNsense credentials", exc_info=err)
         raise CannotConnect from err
-
-    tracker_interfaces: list[str] = data[CONF_TRACKER_INTERFACES]
-    if tracker_interfaces:
-        netinsight_client = diagnostics.NetworkInsightClient(
-            data[CONF_API_KEY],
-            data[CONF_API_SECRET],
-            data[CONF_URL],
-            data.get(CONF_VERIFY_SSL, False),
-            timeout=20,
-        )
-
-        try:
-            interfaces = await hass.async_add_executor_job(
-                lambda: list(netinsight_client.get_interfaces().values())
-            )
-        except APIException as err:
-            _LOGGER.debug(
-                "Failed to validate OPNsense tracker interfaces", exc_info=err
-            )
-            raise CannotConnect from err
-
-        for interface in tracker_interfaces:
-            if interface not in interfaces:
-                raise InvalidTrackerInterface
+    finally:
+        await client.async_close()
 
     return data
 

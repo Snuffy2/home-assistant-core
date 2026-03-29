@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import ipaddress
 import logging
 from typing import Any, cast
+from urllib.parse import urlparse
 
-from pyopnsense import diagnostics
-from pyopnsense.exceptions import APIException
+import aiohttp
+from aiopnsense import OPNsenseClient
 import voluptuous as vol
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
@@ -20,6 +22,7 @@ from homeassistant.helpers import (
     discovery,
     issue_registry as ir,
 )
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -54,6 +57,119 @@ CONFIG_SCHEMA = vol.Schema(
 def _entry_storage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
     """Return integration storage mapping keyed by config entry id."""
     return cast(dict[str, dict[str, Any]], hass.data.setdefault(OPNSENSE_DATA, {}))
+
+
+def _is_private_ip(url: str) -> bool:
+    """Return True when URL host is a private IP address."""
+    host = urlparse(url).hostname
+    if not host:
+        return False
+
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False
+
+
+def _extract_arp_value(entry: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+    """Extract first available ARP value from candidate keys."""
+    for key in keys:
+        value = entry.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+class OPNsenseClientAdapter:
+    """aiopnsense adapter that preserves legacy tracker payload shape."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        url: str,
+        api_key: str,
+        api_secret: str,
+        verify_ssl: bool,
+    ) -> None:
+        """Initialize adapter."""
+        self._client = OPNsenseClient(
+            url=url,
+            username=api_key,
+            password=api_secret,
+            session=async_create_clientsession(
+                hass=hass,
+                raise_for_status=False,
+                cookie_jar=aiohttp.CookieJar(unsafe=_is_private_ip(url)),
+            ),
+            opts={"verify_ssl": verify_ssl},
+        )
+
+    async def async_get_arp(self) -> list[dict[str, Any]]:
+        """Return ARP table entries in legacy field format."""
+        raw_arp = await self._client.get_arp_table(resolve_hostnames=True)
+        if not isinstance(raw_arp, list):
+            return []
+
+        normalized: list[dict[str, Any]] = []
+        for entry in raw_arp:
+            if not isinstance(entry, Mapping):
+                continue
+
+            normalized.append(
+                {
+                    "hostname": _extract_arp_value(entry, ("hostname", "host")),
+                    "intf": _extract_arp_value(entry, ("intf", "interface", "if")),
+                    "intf_description": _extract_arp_value(
+                        entry,
+                        (
+                            "intf_description",
+                            "interface_name",
+                            "interface_description",
+                            "if_descr",
+                        ),
+                    ),
+                    "ip": _extract_arp_value(entry, ("ip", "address")),
+                    "mac": _extract_arp_value(entry, ("mac",)),
+                    "manufacturer": _extract_arp_value(
+                        entry, ("manufacturer", "vendor")
+                    ),
+                }
+            )
+
+        return normalized
+
+    async def async_get_interfaces(self) -> list[str]:
+        """Return interface display names for legacy tracker filtering."""
+        raw_interfaces = await self._client.get_interfaces()
+        if not isinstance(raw_interfaces, Mapping):
+            return []
+
+        interfaces: list[str] = []
+        for interface in raw_interfaces.values():
+            if isinstance(interface, str) and interface:
+                interfaces.append(interface)
+                continue
+
+            if not isinstance(interface, Mapping):
+                continue
+
+            for key in (
+                "name",
+                "description",
+                "if",
+                "interface",
+                "intf_description",
+            ):
+                value = interface.get(key)
+                if isinstance(value, str) and value:
+                    interfaces.append(value)
+                    break
+
+        return list(dict.fromkeys(interfaces))
+
+    async def async_close(self) -> None:
+        """Close underlying client resources."""
+        await self._client.async_close()
 
 
 async def _async_import_from_yaml(
@@ -112,27 +228,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     verify_ssl = data[CONF_VERIFY_SSL]
     tracker_interfaces = data.get(CONF_TRACKER_INTERFACES, [])
 
-    interfaces_client = diagnostics.InterfaceClient(
-        api_key, api_secret, url, verify_ssl, timeout=20
+    client = OPNsenseClientAdapter(
+        hass=hass,
+        url=url,
+        api_key=api_key,
+        api_secret=api_secret,
+        verify_ssl=verify_ssl,
     )
 
     try:
-        await hass.async_add_executor_job(interfaces_client.get_arp)
-    except APIException as err:
+        await client.async_get_arp()
+    except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
         raise ConfigEntryNotReady(
             "Failure while connecting to OPNsense API endpoint"
         ) from err
 
     if tracker_interfaces:
-        netinsight_client = diagnostics.NetworkInsightClient(
-            api_key, api_secret, url, verify_ssl, timeout=20
-        )
-
         try:
-            interfaces = await hass.async_add_executor_job(
-                lambda: list(netinsight_client.get_interfaces().values())
-            )
-        except APIException as err:
+            interfaces = await client.async_get_interfaces()
+        except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
             raise ConfigEntryNotReady(
                 "Failure while validating OPNsense tracker interfaces"
             ) from err
@@ -144,7 +258,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
 
     entry.runtime_data = {
-        CONF_INTERFACE_CLIENT: interfaces_client,
+        CONF_INTERFACE_CLIENT: client,
         CONF_TRACKER_INTERFACES: list(tracker_interfaces),
     }
     _entry_storage(hass)[entry.entry_id] = entry.runtime_data
@@ -162,6 +276,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload an OPNsense config entry."""
+    runtime_data = cast(dict[str, Any], getattr(entry, "runtime_data", {}))
+    client = runtime_data.get(CONF_INTERFACE_CLIENT)
+    if isinstance(client, OPNsenseClientAdapter):
+        await client.async_close()
+
     if OPNSENSE_DATA in hass.data:
         hass.data[OPNSENSE_DATA].pop(entry.entry_id, None)
     return True

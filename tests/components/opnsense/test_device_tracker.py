@@ -1,5 +1,7 @@
 """The tests for the opnsense device tracker platform."""
 
+from __future__ import annotations
+
 from unittest import mock
 
 import pytest
@@ -12,40 +14,43 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 
 
-@pytest.fixture(name="mocked_opnsense")
-def mocked_opnsense():
-    """Mock for pyopnense.diagnostics."""
-    with mock.patch.object(opnsense, "diagnostics") as mocked_opn:
-        yield mocked_opn
+@pytest.fixture(name="mocked_adapter")
+def mocked_adapter() -> mock.MagicMock:
+    """Mock OPNsense aiopnsense adapter."""
+    with mock.patch.object(opnsense, "OPNsenseClientAdapter") as mocked_client:
+        yield mocked_client
 
 
 async def test_get_scanner(
-    hass: HomeAssistant, mocked_opnsense, mock_device_tracker_conf: list[legacy.Device]
+    hass: HomeAssistant,
+    mocked_adapter: mock.MagicMock,
+    mock_device_tracker_conf: list[legacy.Device],
 ) -> None:
     """Test creating an opnsense scanner."""
-    interface_client = mock.MagicMock()
-    mocked_opnsense.InterfaceClient.return_value = interface_client
-    interface_client.get_arp.return_value = [
-        {
-            "hostname": "",
-            "intf": "igb1",
-            "intf_description": "LAN",
-            "ip": "192.168.0.123",
-            "mac": "ff:ff:ff:ff:ff:ff",
-            "manufacturer": "",
-        },
-        {
-            "hostname": "Desktop",
-            "intf": "igb1",
-            "intf_description": "LAN",
-            "ip": "192.168.0.167",
-            "mac": "ff:ff:ff:ff:ff:fe",
-            "manufacturer": "OEM",
-        },
-    ]
-    network_insight_client = mock.MagicMock()
-    mocked_opnsense.NetworkInsightClient.return_value = network_insight_client
-    network_insight_client.get_interfaces.return_value = {"igb0": "WAN", "igb1": "LAN"}
+    adapter = mock.MagicMock()
+    adapter.async_get_arp = mock.AsyncMock(
+        return_value=[
+            {
+                "hostname": "",
+                "intf": "igb1",
+                "intf_description": "LAN",
+                "ip": "192.168.0.123",
+                "mac": "ff:ff:ff:ff:ff:ff",
+                "manufacturer": "",
+            },
+            {
+                "hostname": "Desktop",
+                "intf": "igb1",
+                "intf_description": "LAN",
+                "ip": "192.168.0.167",
+                "mac": "ff:ff:ff:ff:ff:fe",
+                "manufacturer": "OEM",
+            },
+        ]
+    )
+    adapter.async_get_interfaces = mock.AsyncMock(return_value=["WAN", "LAN"])
+    adapter.async_close = mock.AsyncMock()
+    mocked_adapter.return_value = adapter
 
     result = await async_setup_component(
         hass,
@@ -65,4 +70,5 @@ async def test_get_scanner(
     assert device_1 is not None
     assert device_1.state == "home"
     device_2 = hass.states.get("device_tracker.ff_ff_ff_ff_ff_ff")
+    assert device_2 is not None
     assert device_2.state == "home"
