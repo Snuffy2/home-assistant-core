@@ -82,8 +82,8 @@ CONF_TRACKER_INTERFACES = "tracker_interfaces"
 INTEGRATION_TITLE = "OPNsense"
 
 
-def _is_step_0_2_entry(data: Mapping[str, Any]) -> bool:
-    """Return True when config entry data matches the Step 0.2 schema."""
+def _is_legacy_api_key_entry(data: Mapping[str, Any]) -> bool:
+    """Return True when config entry data matches the legacy API-key schema."""
     return (
         CONF_API_KEY in data
         and CONF_API_SECRET in data
@@ -107,10 +107,10 @@ def _normalize_mac_list(value: Any) -> list[str]:
     return macs
 
 
-async def _async_resolve_step_0_2_device_id(
+async def _async_resolve_legacy_device_id(
     hass: HomeAssistant, data: Mapping[str, Any], fallback: str | None
 ) -> str | None:
-    """Resolve the device unique id for Step 0.2 entries."""
+    """Resolve the device unique id for legacy API-key entries."""
     existing_device_id = data.get(CONF_DEVICE_UNIQUE_ID)
     if isinstance(existing_device_id, str) and existing_device_id:
         return existing_device_id
@@ -461,7 +461,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.version == 1 and entry.minor_version < 2:
         data = dict(entry.data)
 
-        if _is_step_0_2_entry(data):
+        if _is_legacy_api_key_entry(data):
             url = data.get(CONF_URL)
             api_key = data.get(CONF_API_KEY)
             api_secret = data.get(CONF_API_SECRET)
@@ -472,15 +472,17 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 or not isinstance(api_key, str)
                 or not isinstance(api_secret, str)
             ):
-                _LOGGER.error("Invalid Step 0.2 entry data for migration")
+                _LOGGER.error("Invalid legacy OPNsense entry data for migration")
                 return False
 
             tracked_macs = _normalize_mac_list(data.get(TRACKED_MACS, []))
-            device_unique_id = await _async_resolve_step_0_2_device_id(
+            device_unique_id = await _async_resolve_legacy_device_id(
                 hass=hass, data=data, fallback=entry.unique_id
             )
             if not device_unique_id:
-                _LOGGER.error("Unable to migrate Step 0.2 entry without device id")
+                _LOGGER.error(
+                    "Unable to migrate legacy OPNsense entry without device id"
+                )
                 return False
 
             migrated_data: dict[str, Any] = {
@@ -519,7 +521,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 minor_version=2,
             )
             _LOGGER.info(
-                "Migrated OPNsense Step 0.2 entry %s to Step 1 format",
+                "Migrated legacy OPNsense entry %s to current config entry format",
                 entry.entry_id,
             )
             return True

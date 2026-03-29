@@ -28,10 +28,10 @@ from homeassistant.core import HomeAssistant
 from tests.common import MockConfigEntry
 
 
-async def test_async_migrate_entry_from_step_0_2(
+async def test_async_migrate_entry_from_legacy_api_key_schema(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Migrate Step 0.2 entries into Step 1 schema and options."""
+    """Migrate legacy API-key entries into the current schema and options."""
 
     class FakeClient:
         async def get_device_unique_id(self) -> str:
@@ -75,7 +75,7 @@ async def test_async_migrate_entry_from_step_0_2(
 
 
 async def test_async_migrate_entry_minor_bump_only(hass: HomeAssistant) -> None:
-    """Minor version migration bumps already-Step-1 entries."""
+    """Minor version migration bumps already-migrated entries."""
     data: dict[str, Any] = {
         CONF_URL: "https://router.local",
         CONF_USERNAME: "key",
