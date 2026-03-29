@@ -67,6 +67,7 @@ from .const import (
     OPNSENSE_MIN_FIRMWARE,
     PLATFORMS,
     SHOULD_RELOAD,
+    TRACKED_MACS,
     VERSION,
 )
 from .coordinator import OPNsenseDataUpdateCoordinator
@@ -78,6 +79,77 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 CONF_API_KEY = "api_key"
 CONF_API_SECRET = "api_secret"
 CONF_TRACKER_INTERFACES = "tracker_interfaces"
+INTEGRATION_TITLE = "OPNsense"
+
+
+def _is_step_0_2_entry(data: Mapping[str, Any]) -> bool:
+    """Return True when config entry data matches the Step 0.2 schema."""
+    return (
+        CONF_API_KEY in data
+        and CONF_API_SECRET in data
+        and CONF_USERNAME not in data
+        and CONF_PASSWORD not in data
+    )
+
+
+def _normalize_mac_list(value: Any) -> list[str]:
+    """Normalize persisted MAC address list."""
+    if not isinstance(value, list):
+        return []
+
+    macs: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        normalized = item.lower()
+        if normalized and normalized not in macs:
+            macs.append(normalized)
+    return macs
+
+
+async def _async_resolve_step_0_2_device_id(
+    hass: HomeAssistant, data: Mapping[str, Any], fallback: str | None
+) -> str | None:
+    """Resolve the device unique id for Step 0.2 entries."""
+    existing_device_id = data.get(CONF_DEVICE_UNIQUE_ID)
+    if isinstance(existing_device_id, str) and existing_device_id:
+        return existing_device_id
+
+    url = data.get(CONF_URL)
+    api_key = data.get(CONF_API_KEY)
+    api_secret = data.get(CONF_API_SECRET)
+    verify_ssl = data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+
+    if (
+        not isinstance(url, str)
+        or not isinstance(api_key, str)
+        or not isinstance(api_secret, str)
+    ):
+        return fallback
+
+    client = OPNsenseClient(
+        url=url,
+        username=api_key,
+        password=api_secret,
+        session=async_create_clientsession(
+            hass=hass,
+            raise_for_status=False,
+            cookie_jar=aiohttp.CookieJar(unsafe=is_private_ip(url)),
+        ),
+        opts={"verify_ssl": verify_ssl},
+        name=INTEGRATION_TITLE,
+    )
+
+    try:
+        device_id = await client.get_device_unique_id()
+    except aiohttp.ClientError, TimeoutError, OSError, ValueError:
+        _LOGGER.warning("Unable to resolve OPNsense device id during migration")
+        return fallback
+    finally:
+        await client.async_close()
+
+    return device_id if isinstance(device_id, str) and device_id else fallback
+
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -376,6 +448,83 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await device_tracker_coordinator.async_config_entry_first_refresh()
 
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
+
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate old OPNsense config entries."""
+    if entry.version > 1:
+        _LOGGER.error("Unsupported OPNsense config entry version: %s", entry.version)
+        return False
+
+    if entry.version == 1 and entry.minor_version < 2:
+        data = dict(entry.data)
+
+        if _is_step_0_2_entry(data):
+            url = data.get(CONF_URL)
+            api_key = data.get(CONF_API_KEY)
+            api_secret = data.get(CONF_API_SECRET)
+            verify_ssl = data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+
+            if (
+                not isinstance(url, str)
+                or not isinstance(api_key, str)
+                or not isinstance(api_secret, str)
+            ):
+                _LOGGER.error("Invalid Step 0.2 entry data for migration")
+                return False
+
+            tracked_macs = _normalize_mac_list(data.get(TRACKED_MACS, []))
+            device_unique_id = await _async_resolve_step_0_2_device_id(
+                hass=hass, data=data, fallback=entry.unique_id
+            )
+            if not device_unique_id:
+                _LOGGER.error("Unable to migrate Step 0.2 entry without device id")
+                return False
+
+            migrated_data: dict[str, Any] = {
+                CONF_NAME: entry.title or INTEGRATION_TITLE,
+                CONF_URL: url,
+                CONF_USERNAME: api_key,
+                CONF_PASSWORD: api_secret,
+                CONF_VERIFY_SSL: verify_ssl,
+                CONF_DEVICE_UNIQUE_ID: device_unique_id,
+                CONF_GRANULAR_SYNC_OPTIONS: True,
+                CONF_SYNC_TELEMETRY: True,
+                CONF_SYNC_INTERFACES: False,
+                CONF_SYNC_DHCP_LEASES: False,
+                CONF_SYNC_GATEWAYS: False,
+                CONF_SYNC_FIREWALL_AND_NAT: False,
+                CONF_SYNC_NOTICES: False,
+                CONF_SYNC_FIRMWARE_UPDATES: False,
+                CONF_SYNC_CARP: False,
+                CONF_SYNC_SERVICES: False,
+                CONF_SYNC_VPN: False,
+                CONF_SYNC_CERTIFICATES: False,
+                CONF_SYNC_UNBOUND: False,
+                CONF_SYNC_VNSTAT: False,
+                CONF_SYNC_SPEEDTEST: False,
+                TRACKED_MACS: tracked_macs,
+            }
+            migrated_options = dict(entry.options)
+            migrated_options[CONF_DEVICE_TRACKER_ENABLED] = True
+            migrated_options[CONF_DEVICES] = tracked_macs
+
+            hass.config_entries.async_update_entry(
+                entry,
+                unique_id=device_unique_id,
+                data=migrated_data,
+                options=migrated_options,
+                minor_version=2,
+            )
+            _LOGGER.info(
+                "Migrated OPNsense Step 0.2 entry %s to Step 1 format",
+                entry.entry_id,
+            )
+            return True
+
+        hass.config_entries.async_update_entry(entry, minor_version=2)
 
     return True
 

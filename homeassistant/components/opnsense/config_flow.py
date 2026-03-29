@@ -824,6 +824,7 @@ class OPNsenseConfigFlow(ConfigFlow, domain=DOMAIN):
 
     # bumping this is what triggers async_migrate_entry for the component
     VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
