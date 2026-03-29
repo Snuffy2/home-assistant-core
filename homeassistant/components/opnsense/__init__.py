@@ -1,42 +1,83 @@
-"""Support for OPNsense Routers."""
+"""Home Assistant integration for OPNsense firewalls.
 
-from __future__ import annotations
+This integration provides monitoring and control of OPNsense firewall devices,
+including system information, network interfaces, firewall rules, DHCP leases,
+and various other OPNsense features through the Home Assistant interface.
+"""
 
 from collections.abc import Mapping
-import ipaddress
+from datetime import timedelta
 import logging
-from typing import Any, cast
-from urllib.parse import urlparse
+from typing import Any
 
 import aiohttp
 from aiopnsense import OPNsenseClient
+import awesomeversion
 import voluptuous as vol
 
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import CONF_API_KEY, CONF_URL, CONF_VERIFY_SSL, Platform
-from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    CONF_NAME,
+    CONF_PASSWORD,
+    CONF_SCAN_INTERVAL,
+    CONF_URL,
+    CONF_USERNAME,
+    CONF_VERIFY_SSL,
+    Platform,
+)
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     config_validation as cv,
-    discovery,
+    device_registry as dr,
+    entity_registry as er,
     issue_registry as ir,
 )
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
-    CONF_API_SECRET,
+    CONF_DEVICE_TRACKER_ENABLED,
+    CONF_DEVICE_TRACKER_SCAN_INTERVAL,
     CONF_DEVICE_UNIQUE_ID,
-    CONF_INTERFACE_CLIENT,
-    CONF_TRACKER_INTERFACES,
+    CONF_DEVICES,
+    CONF_GRANULAR_SYNC_OPTIONS,
+    CONF_SYNC_CARP,
+    CONF_SYNC_CERTIFICATES,
+    CONF_SYNC_DHCP_LEASES,
+    CONF_SYNC_FIREWALL_AND_NAT,
+    CONF_SYNC_FIRMWARE_UPDATES,
+    CONF_SYNC_GATEWAYS,
+    CONF_SYNC_INTERFACES,
+    CONF_SYNC_NOTICES,
+    CONF_SYNC_SERVICES,
+    CONF_SYNC_SPEEDTEST,
+    CONF_SYNC_TELEMETRY,
+    CONF_SYNC_UNBOUND,
+    CONF_SYNC_VNSTAT,
+    CONF_SYNC_VPN,
+    DEFAULT_DEVICE_TRACKER_ENABLED,
+    DEFAULT_DEVICE_TRACKER_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SYNC_OPTION_VALUE,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
-    INTEGRATION_TITLE,
-    OPNSENSE_DATA,
-    TRACKED_MACS,
+    GRANULAR_SYNC_PREFIX,
+    LOADED_PLATFORMS,
+    OPNSENSE_CLIENT,
+    OPNSENSE_MIN_FIRMWARE,
+    PLATFORMS,
+    SHOULD_RELOAD,
+    VERSION,
 )
+from .coordinator import OPNsenseDataUpdateCoordinator
+from .helpers import is_private_ip
+from .models import OPNsenseData
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER: logging.Logger = logging.getLogger(__name__)
+
+CONF_API_KEY = "api_key"
+CONF_API_SECRET = "api_secret"
+CONF_TRACKER_INTERFACES = "tracker_interfaces"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -56,264 +97,357 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 
-def _entry_storage(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
-    """Return integration storage mapping keyed by config entry id."""
-    return cast(dict[str, dict[str, Any]], hass.data.setdefault(OPNSENSE_DATA, {}))
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update for the OPNsense integration.
 
+    This function is called when the configuration entry options are updated.
+    It handles reloading the integration if necessary, removing entities that
+    are no longer enabled based on granular sync options, and cleaning up
+    device tracker devices if device tracking is disabled.
 
-def _is_private_ip(url: str) -> bool:
-    """Return True when URL host is a private IP address."""
-    host = urlparse(url).hostname
-    if not host:
-        return False
+    Parameters
+    ----------
+    hass : HomeAssistant
+        The Home Assistant instance.
+    entry : ConfigEntry
+        The configuration entry for the OPNsense integration.
 
-    try:
-        return ipaddress.ip_address(host).is_private
-    except ValueError:
-        return False
+    """
+    if getattr(entry.runtime_data, SHOULD_RELOAD, True):
+        _LOGGER.info("[async_update_listener] Reloading")
 
+        uid_prefix = entry.unique_id
+        removal_prefixes: list[str] = []
+        for item, prefix in GRANULAR_SYNC_PREFIX.items():
+            if not entry.data.get(item, DEFAULT_SYNC_OPTION_VALUE):
+                removal_prefixes.extend(prefix)
+        _LOGGER.debug("[async_update_listener] removal_prefixes: %s", removal_prefixes)
 
-def _extract_arp_value(entry: Mapping[str, Any], keys: tuple[str, ...]) -> str:
-    """Extract first available ARP value from candidate keys."""
-    for key in keys:
-        value = entry.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return ""
-
-
-class OPNsenseClientAdapter:
-    """aiopnsense adapter that preserves legacy tracker payload shape."""
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        url: str,
-        api_key: str,
-        api_secret: str,
-        verify_ssl: bool,
-    ) -> None:
-        """Initialize adapter."""
-        self._client = OPNsenseClient(
-            url=url,
-            username=api_key,
-            password=api_secret,
-            session=async_create_clientsession(
-                hass=hass,
-                raise_for_status=False,
-                cookie_jar=aiohttp.CookieJar(unsafe=_is_private_ip(url)),
-            ),
-            opts={"verify_ssl": verify_ssl},
-        )
-
-    async def async_get_arp(self) -> list[dict[str, Any]]:
-        """Return ARP table entries in legacy field format."""
-        raw_arp = await self._client.get_arp_table(resolve_hostnames=True)
-        if not isinstance(raw_arp, list):
-            return []
-
-        normalized: list[dict[str, Any]] = []
-        for entry in raw_arp:
-            if not isinstance(entry, Mapping):
-                continue
-
-            normalized.append(
-                {
-                    "hostname": _extract_arp_value(entry, ("hostname", "host")),
-                    "intf": _extract_arp_value(entry, ("intf", "interface", "if")),
-                    "intf_description": _extract_arp_value(
-                        entry,
-                        (
-                            "intf_description",
-                            "interface_name",
-                            "interface_description",
-                            "if_descr",
-                        ),
-                    ),
-                    "ip": _extract_arp_value(entry, ("ip", "address")),
-                    "mac": _extract_arp_value(entry, ("mac",)),
-                    "manufacturer": _extract_arp_value(
-                        entry, ("manufacturer", "vendor")
-                    ),
-                }
-            )
-
-        return normalized
-
-    async def async_get_interfaces(self) -> list[str]:
-        """Return interface display names for legacy tracker filtering."""
-        raw_interfaces = await self._client.get_interfaces()
-        if not isinstance(raw_interfaces, Mapping):
-            return []
-
-        interfaces: list[str] = []
-        for interface in raw_interfaces.values():
-            if isinstance(interface, str) and interface:
-                interfaces.append(interface)
-                continue
-
-            if not isinstance(interface, Mapping):
-                continue
-
-            for key in (
-                "name",
-                "description",
-                "if",
-                "interface",
-                "intf_description",
-            ):
-                value = interface.get(key)
-                if isinstance(value, str) and value:
-                    interfaces.append(value)
+        entity_registry = er.async_get(hass)
+        for ent in er.async_entries_for_config_entry(
+            registry=entity_registry, config_entry_id=entry.entry_id
+        ):
+            for pre in removal_prefixes:
+                if ent.unique_id.startswith(f"{uid_prefix}_{pre}"):
+                    _LOGGER.debug(
+                        "[async_update_listener] removing entity_id: %s, unique_id: %s",
+                        ent.entity_id,
+                        ent.unique_id,
+                    )
+                    entity_registry.async_remove(ent.entity_id)
                     break
-
-        return list(dict.fromkeys(interfaces))
-
-    async def async_get_device_unique_id(self) -> str | None:
-        """Return device unique id when available."""
-        device_id = await self._client.get_device_unique_id()
-        if not isinstance(device_id, str) or not device_id:
-            return None
-        return device_id
-
-    async def async_close(self) -> None:
-        """Close underlying client resources."""
-        await self._client.async_close()
-
-
-async def _async_import_from_yaml(
-    hass: HomeAssistant, yaml_config: Mapping[str, Any]
-) -> None:
-    """Import YAML config into a config entry and raise a deprecation issue."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": SOURCE_IMPORT},
-        data={
-            CONF_URL: yaml_config[CONF_URL],
-            CONF_API_KEY: yaml_config[CONF_API_KEY],
-            CONF_API_SECRET: yaml_config[CONF_API_SECRET],
-            CONF_VERIFY_SSL: yaml_config.get(CONF_VERIFY_SSL, False),
-            CONF_TRACKER_INTERFACES: list(yaml_config.get(CONF_TRACKER_INTERFACES, [])),
-        },
-    )
-
-    if (
-        result.get("type") == FlowResultType.ABORT
-        and result.get("reason") != "already_configured"
-    ):
-        _LOGGER.warning("Failed to import OPNsense YAML config: %s", result)
-        return
-
-    ir.async_create_issue(
-        hass,
-        HOMEASSISTANT_DOMAIN,
-        f"deprecated_yaml_{DOMAIN}",
-        breaks_in_ha_version="2027.1.0",
-        is_fixable=False,
-        issue_domain=DOMAIN,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key="deprecated_yaml",
-        translation_placeholders={
-            "domain": DOMAIN,
-            "integration_title": INTEGRATION_TITLE,
-        },
-    )
+        dt_enabled = entry.options.get(
+            CONF_DEVICE_TRACKER_ENABLED, DEFAULT_DEVICE_TRACKER_ENABLED
+        )
+        if not dt_enabled:
+            device_registry = dr.async_get(hass)
+            devices = dr.async_entries_for_config_entry(
+                registry=device_registry, config_entry_id=entry.entry_id
+            )
+            for device in devices:
+                if device.via_device_id:
+                    _LOGGER.debug(
+                        "[async_update_listener] removing device: %s", device.name
+                    )
+                    device_registry.async_remove_device(device.id)
+        hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+    else:
+        _LOGGER.info("[async_update_listener] Not Reloading")
+        setattr(entry.runtime_data, SHOULD_RELOAD, True)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the OPNsense integration."""
+    """Set up the OPNsense integration at the domain level.
+
+    This function is called during Home Assistant startup to initialize
+    integration-level services for the OPNsense domain.
+
+    Parameters
+    ----------
+    hass : HomeAssistant
+        The Home Assistant instance.
+    config : ConfigType
+        The configuration dictionary (unused for config entry only integrations).
+
+    Returns:
+    -------
+    bool
+        Always returns True to indicate successful setup.
+
+    """
     if DOMAIN in config:
-        hass.async_create_task(_async_import_from_yaml(hass, config[DOMAIN]))
+        legacy_config = config[DOMAIN]
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": "import"},
+                data={
+                    CONF_NAME: "OPNsense",
+                    CONF_URL: legacy_config[CONF_URL],
+                    CONF_USERNAME: legacy_config[CONF_API_KEY],
+                    CONF_PASSWORD: legacy_config[CONF_API_SECRET],
+                    CONF_VERIFY_SSL: legacy_config.get(CONF_VERIFY_SSL, False),
+                    CONF_GRANULAR_SYNC_OPTIONS: True,
+                    CONF_SYNC_TELEMETRY: True,
+                    CONF_SYNC_INTERFACES: False,
+                    CONF_SYNC_DHCP_LEASES: False,
+                    CONF_SYNC_GATEWAYS: False,
+                    CONF_SYNC_FIREWALL_AND_NAT: False,
+                    CONF_SYNC_NOTICES: False,
+                    CONF_SYNC_FIRMWARE_UPDATES: False,
+                    CONF_SYNC_CARP: False,
+                    CONF_SYNC_SERVICES: False,
+                    CONF_SYNC_VPN: False,
+                    CONF_SYNC_CERTIFICATES: False,
+                    CONF_SYNC_UNBOUND: False,
+                    CONF_SYNC_VNSTAT: False,
+                    CONF_SYNC_SPEEDTEST: False,
+                    "_import_options": {
+                        CONF_DEVICE_TRACKER_ENABLED: True,
+                        CONF_DEVICES: [],
+                    },
+                },
+            )
+        )
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up OPNsense from a config entry."""
-    data = entry.data
+    """Set up the OPNsense integration from a configuration entry.
 
-    url = data[CONF_URL]
-    api_key = data[CONF_API_KEY]
-    api_secret = data[CONF_API_SECRET]
-    verify_ssl = data[CONF_VERIFY_SSL]
-    tracker_interfaces = data.get(CONF_TRACKER_INTERFACES, [])
+    This function initializes the OPNsense client, coordinators, and platforms
+    based on the provided configuration entry. It performs firmware version
+    checks, handles device ID validation, and sets up data coordinators for
+    state updates and device tracking.
 
-    client = OPNsenseClientAdapter(
-        hass=hass,
+    Parameters
+    ----------
+    hass : HomeAssistant
+        The Home Assistant instance.
+    entry : ConfigEntry
+        The configuration entry containing OPNsense connection details.
+
+    Returns:
+    -------
+    bool
+        True if setup was successful, False otherwise.
+
+    Raises:
+    ------
+    Various exceptions may be raised during client initialization or firmware
+    checks, but they are handled internally with appropriate logging and issue
+    creation.
+
+    """
+    config: Mapping[str, Any] = entry.data
+    options: Mapping[str, Any] = entry.options
+
+    url: str = config[CONF_URL]
+    username: str = config[CONF_USERNAME]
+    password: str = config[CONF_PASSWORD]
+    verify_ssl: bool = config.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+    device_tracker_enabled: bool = options.get(
+        CONF_DEVICE_TRACKER_ENABLED, DEFAULT_DEVICE_TRACKER_ENABLED
+    )
+    config_device_id: str = config[CONF_DEVICE_UNIQUE_ID]
+
+    client = OPNsenseClient(
         url=url,
-        api_key=api_key,
-        api_secret=api_secret,
-        verify_ssl=verify_ssl,
+        username=username,
+        password=password,
+        session=async_create_clientsession(
+            hass=hass,
+            raise_for_status=False,
+            cookie_jar=aiohttp.CookieJar(unsafe=is_private_ip(url)),
+        ),
+        opts={"verify_ssl": verify_ssl},
+        name=entry.title,
     )
 
+    scan_interval: int = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    _LOGGER.info("Starting the OPNsense integration %s", VERSION)
+
+    coordinator = OPNsenseDataUpdateCoordinator(
+        hass=hass,
+        name=f"{entry.title} state",
+        update_interval=timedelta(seconds=scan_interval),
+        client=client,
+        device_unique_id=config_device_id,
+        config_entry=entry,
+    )
+
+    # Trigger repair task and shutdown if device id has changed
+    router_device_id: str | None = await client.get_device_unique_id(
+        expected_id=config_device_id
+    )
+    _LOGGER.debug(
+        "[init async_setup_entry]: config device id: %s, router device id: %s",
+        config_device_id,
+        router_device_id,
+    )
+    if router_device_id != config_device_id and router_device_id:
+        ir.async_create_issue(
+            hass=hass,
+            domain=DOMAIN,
+            issue_id=f"{config_device_id}_device_id_mismatched",
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="device_id_mismatched",
+        )
+        _LOGGER.error(
+            "OPNsense Device ID has changed which indicates new or changed hardware. "
+            "In order to accommodate this, the OPNsense integration needs to be removed and reinstalled for this router. "
+            "The OPNsense integration is shutting down"
+        )
+        await coordinator.async_shutdown()
+        return False
+
+    firmware: str | None = await client.get_host_firmware_version()
+    _LOGGER.info("OPNsense Firmware %s", firmware)
     try:
-        arp_entries = await client.async_get_arp()
-    except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
-        raise ConfigEntryNotReady(
-            "Failure while connecting to OPNsense API endpoint"
-        ) from err
-
-    if tracker_interfaces:
-        try:
-            interfaces = await client.async_get_interfaces()
-        except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
-            raise ConfigEntryNotReady(
-                "Failure while validating OPNsense tracker interfaces"
-            ) from err
-
-        for interface in tracker_interfaces:
-            if interface not in interfaces:
-                raise ConfigEntryNotReady(
-                    f"Specified OPNsense tracker interface {interface} is not found"
-                )
-
-    migrated_data = dict(entry.data)
-    tracked_macs: list[str] = []
-    for arp_entry in arp_entries:
-        mac = arp_entry.get("mac")
-        if isinstance(mac, str):
-            normalized = mac.lower()
-            if normalized and normalized not in tracked_macs:
-                tracked_macs.append(normalized)
-
-    device_unique_id = await client.async_get_device_unique_id()
-    if (
-        device_unique_id
-        and migrated_data.get(CONF_DEVICE_UNIQUE_ID) != device_unique_id
+        if awesomeversion.AwesomeVersion(firmware) < awesomeversion.AwesomeVersion(
+            OPNSENSE_MIN_FIRMWARE
+        ):
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                f"{config_device_id}_opnsense_below_min_firmware_{OPNSENSE_MIN_FIRMWARE}",
+                is_fixable=False,
+                is_persistent=False,
+                issue_domain=DOMAIN,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="below_min_firmware",
+                translation_placeholders={
+                    "version": str(VERSION),
+                    "min_firmware": str(OPNSENSE_MIN_FIRMWARE),
+                    "firmware": firmware or "Unknown",
+                },
+            )
+            await coordinator.async_shutdown()
+            return False
+        ir.async_delete_issue(
+            hass,
+            DOMAIN,
+            f"{config_device_id}_opnsense_below_min_firmware_{OPNSENSE_MIN_FIRMWARE}",
+        )
+    except (
+        awesomeversion.exceptions.AwesomeVersionCompareException,
+        TypeError,
+        ValueError,
     ):
-        migrated_data[CONF_DEVICE_UNIQUE_ID] = device_unique_id
-    if tracked_macs:
-        migrated_data[TRACKED_MACS] = tracked_macs
-    if migrated_data != entry.data or entry.unique_id != device_unique_id:
-        hass.config_entries.async_update_entry(
-            entry,
-            data=migrated_data,
-            unique_id=device_unique_id or entry.unique_id,
+        _LOGGER.warning("Unable to confirm OPNsense Firmware version")
+
+    await coordinator.async_config_entry_first_refresh()
+
+    platforms: list[Platform] = PLATFORMS.copy()
+    device_tracker_coordinator = None
+    if not device_tracker_enabled and Platform.DEVICE_TRACKER in platforms:
+        platforms.remove(Platform.DEVICE_TRACKER)
+    else:
+        device_tracker_scan_interval = options.get(
+            CONF_DEVICE_TRACKER_SCAN_INTERVAL, DEFAULT_DEVICE_TRACKER_SCAN_INTERVAL
         )
 
-    entry.runtime_data = {
-        CONF_INTERFACE_CLIENT: client,
-        CONF_TRACKER_INTERFACES: list(tracker_interfaces),
-    }
-    _entry_storage(hass)[entry.entry_id] = entry.runtime_data
+        device_tracker_coordinator = OPNsenseDataUpdateCoordinator(
+            hass=hass,
+            name=f"{entry.title} Device Tracker state",
+            update_interval=timedelta(seconds=device_tracker_scan_interval),
+            client=client,
+            config_entry=entry,
+            device_unique_id=config_device_id,
+            device_tracker_coordinator=True,
+        )
 
-    await discovery.async_load_platform(
-        hass,
-        Platform.DEVICE_TRACKER,
-        DOMAIN,
-        {"entry_id": entry.entry_id},
-        hass.config.as_dict(),
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = client
+
+    entry.runtime_data = OPNsenseData(
+        coordinator=coordinator,
+        device_tracker_coordinator=device_tracker_coordinator,
+        opnsense_client=client,
+        device_unique_id=config_device_id,
+        loaded_platforms=platforms,
     )
 
+    if device_tracker_enabled and device_tracker_coordinator:
+        # Fetch initial data so we have data when entities subscribe
+        await device_tracker_coordinator.async_config_entry_first_refresh()
+
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+
+    return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Remove OPNsense devices that are not device tracker devices and have no linked entities.
+
+    This function checks if an OPNsense device can be safely removed. It prevents
+    removal of device tracker devices and devices that still have linked entities.
+
+    Parameters
+    ----------
+    hass : HomeAssistant
+        The Home Assistant instance.
+    config_entry : ConfigEntry
+        The configuration entry for the OPNsense integration.
+    device_entry : dr.DeviceEntry
+        The device entry to be removed.
+
+    Returns:
+    -------
+    bool
+        True if the device can be removed, False otherwise.
+
+    """
+    if device_entry.via_device_id:
+        _LOGGER.error(
+            "Remove OPNsense Device Tracker Devices via the Integration Configuration"
+        )
+        return False
+    entity_registry = er.async_get(hass)
+    for ent in er.async_entries_for_config_entry(
+        entity_registry, config_entry.entry_id
+    ):
+        if ent.device_id == device_entry.id:
+            _LOGGER.error(
+                "Cannot remove OPNsense Devices with linked entities at this time"
+            )
+            return False
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload an OPNsense config entry."""
-    runtime_data = cast(dict[str, Any], getattr(entry, "runtime_data", {}))
-    client = runtime_data.get(CONF_INTERFACE_CLIENT)
-    if isinstance(client, OPNsenseClientAdapter):
-        await client.async_close()
+    """Unload the OPNsense integration configuration entry.
 
-    if OPNSENSE_DATA in hass.data:
-        hass.data[OPNSENSE_DATA].pop(entry.entry_id, None)
-    return True
+    This function unloads all platforms associated with the configuration entry,
+    closes the OPNsense client connection, and cleans up the entry data.
+
+    Parameters
+    ----------
+    hass : HomeAssistant
+        The Home Assistant instance.
+    entry : ConfigEntry
+        The configuration entry to unload.
+
+    Returns:
+    -------
+    bool
+        True if unloading was successful, False otherwise.
+
+    """
+    _LOGGER.info("Unloading: %s", entry.as_dict())
+    platforms: list[Platform] = getattr(entry.runtime_data, LOADED_PLATFORMS)
+    client: OPNsenseClient = getattr(entry.runtime_data, OPNSENSE_CLIENT)
+    unload_ok: bool = await hass.config_entries.async_unload_platforms(entry, platforms)
+
+    await client.async_close()
+
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+
+    return unload_ok
