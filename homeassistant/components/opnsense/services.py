@@ -54,6 +54,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SEND_WOL,
         SERVICE_RELOAD_INTERFACE,
         SERVICE_GENERATE_VOUCHERS,
+        SERVICE_KILL_STATES,
+        SERVICE_TOGGLE_ALIAS,
     }
 
     # Keep the full service list explicit so each staged PR only expands this set.
