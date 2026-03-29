@@ -46,7 +46,7 @@ from .const import (
 )
 from .coordinator import OPNsenseDataUpdateCoordinator
 from .entity import OPNsenseEntity
-from .helpers import dict_get
+from .helpers import coerce_bool, dict_get
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -377,23 +377,101 @@ async def _compile_carp_interface_sensors(
         return []
     entities: list = []
 
-    for interface in state.get("carp_interfaces", []):
-        entity = OPNsenseCarpInterfaceSensor(
+    interface_descriptions = _build_interface_device_description_map(
+        dict_get(state, "interfaces", {}) or {}
+    )
+    carp_interfaces = dict_get(state, "carp.interfaces", []) or []
+    for interface in carp_interfaces:
+        if not isinstance(interface, MutableMapping):
+            _LOGGER.debug(
+                "Skipping malformed CARP interface entry that is not a mapping: %r",
+                interface,
+            )
+            continue
+        try:
+            subnet = interface.get("subnet")
+            if not isinstance(subnet, str) or not subnet.strip():
+                _LOGGER.debug(
+                    "Skipping CARP interface entry with invalid subnet: %r", interface
+                )
+                continue
+            subnet = subnet.strip()
+
+            interface_name = interface.get("interface")
+            interface_label = (
+                str(interface_name).strip() if interface_name is not None else ""
+            )
+            if not interface_label:
+                interface_label = "unknown"
+            friendly_interface_name = interface_descriptions.get(
+                interface_label, interface_label
+            )
+
+            entity = OPNsenseCarpInterfaceSensor(
+                config_entry=config_entry,
+                coordinator=coordinator,
+                entity_description=SensorEntityDescription(
+                    key=_build_carp_interface_sensor_key(interface_label, subnet),
+                    name=f"CARP Interface: {friendly_interface_name}: {subnet}",
+                    native_unit_of_measurement=None,
+                    device_class=None,
+                    icon="mdi:check-network",
+                    state_class=None,
+                    entity_registry_enabled_default=False,
+                ),
+            )
+            entities.append(entity)
+        except (AttributeError, TypeError, ValueError) as err:
+            _LOGGER.debug(
+                "Skipping malformed CARP interface entry: %r (%s)", interface, err
+            )
+    return entities
+
+
+def _build_carp_interface_sensor_key(interface_name: str | None, subnet: str) -> str:
+    """Build CARP interface sensor key with interface and subnet context."""
+    interface_label = interface_name.strip() if isinstance(interface_name, str) else ""
+    interface_slug = slugify(interface_label) if interface_label else "unknown"
+    if not interface_slug:
+        interface_slug = "unknown"
+    subnet_slug = slugify(subnet.strip())
+    return f"carp.interface.{interface_slug}.{subnet_slug}"
+
+
+def _parse_carp_interface_sensor_key(key: str) -> tuple[str, str] | None:
+    """Parse CARP interface sensor key into interface and subnet slugs."""
+    key_parts = key.split(".")
+    if len(key_parts) != 4 or key_parts[0] != "carp" or key_parts[1] != "interface":
+        return None
+    interface_slug = key_parts[2].strip() or "unknown"
+    subnet_slug = key_parts[3].strip()
+    if not subnet_slug:
+        return None
+    return (interface_slug, subnet_slug)
+
+
+async def _compile_carp_status_sensor(
+    config_entry: ConfigEntry,
+    coordinator: OPNsenseDataUpdateCoordinator,
+    state: Any,
+) -> list:
+    if not isinstance(state, MutableMapping):
+        return []
+    return [
+        OPNsenseCarpStatusSensor(
             config_entry=config_entry,
             coordinator=coordinator,
             entity_description=SensorEntityDescription(
-                key=f"carp.interface.{slugify(interface['subnet'])}",  # subnet is actually the ip
-                name=f"CARP Interface Status {slugify(interface['subnet'])} ({interface.get('descr', '')})",
+                key="carp.status_summary",
+                name="CARP Status",
                 native_unit_of_measurement=None,
                 device_class=None,
-                icon="mdi:check-network",
+                icon="mdi:gauge",
                 state_class=None,
-                entity_registry_enabled_default=True,
-                # entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                entity_registry_enabled_default=False,
             ),
         )
-        entities.append(entity)
-    return entities
+    ]
 
 
 async def _compile_interface_sensors(
@@ -751,6 +829,9 @@ async def async_setup_entry(
         )
     if config.get(CONF_SYNC_CARP, DEFAULT_SYNC_OPTION_VALUE):
         entities.extend(
+            await _compile_carp_status_sensor(config_entry, coordinator, state)
+        )
+        entities.extend(
             await _compile_carp_interface_sensors(config_entry, coordinator, state)
         )
     if config.get(CONF_SYNC_DHCP_LEASES, DEFAULT_SYNC_OPTION_VALUE):
@@ -1074,11 +1155,43 @@ class OPNsenseCarpInterfaceSensor(OPNsenseSensor):
             self.async_write_ha_state()
             return
         state = raw_state
-        carp_interface_name: str = self.entity_description.key.split(".")[2]
-        for i_interface in state.get("carp_interfaces", []):
-            if slugify(i_interface["subnet"]) == carp_interface_name:
-                carp_interface = i_interface
-                break
+        key_data = _parse_carp_interface_sensor_key(self.entity_description.key)
+        if key_data is None:
+            self._available = False
+            self.async_write_ha_state()
+            return
+        expected_interface_slug, expected_subnet_slug = key_data
+        carp_interfaces = dict_get(state, "carp.interfaces", []) or []
+        for i_interface in carp_interfaces:
+            if not isinstance(i_interface, MutableMapping):
+                _LOGGER.debug(
+                    "Skipping malformed CARP interface entry that is not a mapping: %r",
+                    i_interface,
+                )
+                continue
+            subnet = i_interface.get("subnet")
+            if not isinstance(subnet, str) or not subnet.strip():
+                _LOGGER.debug(
+                    "Skipping CARP interface entry with invalid subnet: %r", i_interface
+                )
+                continue
+            if slugify(subnet.strip()) != expected_subnet_slug:
+                continue
+
+            interface_name = i_interface.get("interface")
+            interface_label = (
+                str(interface_name).strip() if interface_name is not None else ""
+            )
+            candidate_interface_slug = (
+                slugify(interface_label) if interface_label else "unknown"
+            )
+            if not candidate_interface_slug:
+                candidate_interface_slug = "unknown"
+            if candidate_interface_slug != expected_interface_slug:
+                continue
+
+            carp_interface = dict(i_interface)
+            break
         if not carp_interface:
             self._available = False
             self.async_write_ha_state()
@@ -1100,6 +1213,7 @@ class OPNsenseCarpInterfaceSensor(OPNsenseSensor):
             "subnet_bits",
             "subnet",
             "descr",
+            "mode",
         ):
             if attr in carp_interface:
                 self._attr_extra_state_attributes[attr] = carp_interface[attr]
@@ -1108,7 +1222,69 @@ class OPNsenseCarpInterfaceSensor(OPNsenseSensor):
     @property
     def icon(self) -> str | None:
         """Return the icon for the sensor."""
-        if self.native_value != "MASTER":
+        if not self.native_value or not isinstance(self.native_value, str):
+            return "mdi:close-network-outline"
+        status = self.native_value.upper()
+        if status == "MASTER":
+            return "mdi:check-network"
+        if status == "BACKUP":
+            return "mdi:backup-restore"
+        return "mdi:close-network-outline"
+
+
+class OPNsenseCarpStatusSensor(OPNsenseSensor):
+    """Class for OPNsense aggregate CARP status sensor."""
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        raw_state: object = self.coordinator.data
+        if not isinstance(raw_state, MutableMapping):
+            self._available = False
+            self.async_write_ha_state()
+            return
+        state = raw_state
+        summary_raw = dict_get(state, "carp.status_summary")
+        if not isinstance(summary_raw, MutableMapping):
+            self._available = False
+            self.async_write_ha_state()
+            return
+
+        summary = dict(summary_raw)
+        raw_summary_state = summary.get("state")
+        if not isinstance(raw_summary_state, str) or not raw_summary_state:
+            self._available = False
+            self.async_write_ha_state()
+            return
+
+        self._available = True
+        if raw_summary_state in ("unavailable", "unknown"):
+            self._attr_native_value = raw_summary_state
+        else:
+            summary_state = raw_summary_state.strip().replace("_", " ").title()
+            self._attr_native_value = summary_state
+        self._attr_extra_state_attributes = {
+            "enabled": coerce_bool(summary.get("enabled")),
+            "maintenance_mode": coerce_bool(summary.get("maintenance_mode")),
+            "demotion": summary.get("demotion", 0),
+            "status_message": summary.get("status_message", ""),
+            "vip_count": summary.get("vip_count", 0),
+            "master_count": summary.get("master_count", 0),
+            "backup_count": summary.get("backup_count", 0),
+            "other_count": summary.get("other_count", 0),
+            "interfaces": summary.get("interfaces", []),
+            "vips": summary.get("vips", []),
+        }
+        self.async_write_ha_state()
+
+    @property
+    def icon(self) -> str | None:
+        """Return the icon for the sensor."""
+        state_value = str(self.native_value).lower().strip().replace(" ", "_")
+        if state_value == "healthy":
+            return "mdi:check-network"
+        if state_value in {"maintenance", "not_configured"}:
+            return "mdi:backup-restore"
+        if state_value in {"degraded", "disabled"}:
             return "mdi:close-network-outline"
         return super().icon
 

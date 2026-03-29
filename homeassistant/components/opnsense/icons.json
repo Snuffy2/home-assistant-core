@@ -1,9 +1,6 @@
 {
   "entity": {
     "binary_sensor": {
-      "carp_status": {
-        "default": "mdi:gauge"
-      },
       "pending_notices_present": {
         "default": "mdi:alert"
       }

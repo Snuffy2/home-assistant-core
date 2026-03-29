@@ -39,3 +39,14 @@ def is_private_ip(url: str) -> bool:
         return False
     else:
         return ip_obj.is_private
+
+
+def coerce_bool(value: Any) -> bool:
+    """Normalize values that may represent booleans."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False

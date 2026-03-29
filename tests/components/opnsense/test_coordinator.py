@@ -8,6 +8,7 @@ calculations, and update flow.
 from collections.abc import MutableMapping
 from datetime import timedelta
 import time
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -92,6 +93,35 @@ async def test_get_states_handles_missing_method_and_calls(
     state = await coord._get_states(categories)
     assert "telemetry" in state
     assert "bad" not in state
+
+
+@pytest.mark.asyncio
+async def test_get_states_uses_single_carp_call(
+    make_config_entry: Any, fake_client: Any
+) -> None:
+    """Coordinator fetches unified CARP payload with a single client call."""
+    client = fake_client()()
+    client.get_carp = AsyncMock(
+        return_value={
+            "interfaces": [
+                {"interface": "wan", "subnet": "1.2.3.4", "status": "MASTER"}
+            ],
+            "status_summary": {"state": "healthy", "vip_count": 1},
+        }
+    )
+    coord = OPNsenseDataUpdateCoordinator(
+        hass=MagicMock(),
+        client=client,
+        name="n",
+        update_interval=timedelta(seconds=1),
+        device_unique_id="id",
+        config_entry=make_config_entry(),
+    )
+
+    state = await coord._get_states([{"function": "get_carp", "state_key": "carp"}])
+    client.get_carp.assert_awaited_once()
+    assert state["carp"]["interfaces"][0]["status"] == "MASTER"
+    assert state["carp"]["status_summary"]["state"] == "healthy"
 
 
 @pytest.mark.asyncio
@@ -411,7 +441,7 @@ def test_build_categories_returns_empty_when_no_config(
         (CONF_SYNC_SPEEDTEST, ["speedtest"]),
         (CONF_SYNC_VPN, ["openvpn", "wireguard"]),
         (CONF_SYNC_FIRMWARE_UPDATES, ["firmware_update_info"]),
-        (CONF_SYNC_CARP, ["carp_interfaces", "carp_status"]),
+        (CONF_SYNC_CARP, ["carp"]),
         (CONF_SYNC_DHCP_LEASES, ["dhcp_leases"]),
         (CONF_SYNC_GATEWAYS, ["gateways"]),
         (CONF_SYNC_SERVICES, ["services"]),
