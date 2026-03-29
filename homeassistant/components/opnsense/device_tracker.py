@@ -8,7 +8,12 @@ from homeassistant.components.device_tracker import DeviceScanner
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import CONF_INTERFACE_CLIENT, CONF_TRACKER_INTERFACES, OPNSENSE_DATA
+from .const import (
+    CONF_INTERFACE_CLIENT,
+    CONF_TRACKER_INTERFACES,
+    OPNSENSE_DATA,
+    TRACKED_MACS,
+)
 
 
 class OPNsenseClientProtocol(Protocol):
@@ -39,17 +44,30 @@ async def async_get_scanner(
     return OPNsenseDeviceScanner(
         entry_data[CONF_INTERFACE_CLIENT],
         entry_data[CONF_TRACKER_INTERFACES],
+        hass=hass,
+        entry_id=discovery_info.get("entry_id")
+        if isinstance(discovery_info, dict)
+        and isinstance(discovery_info.get("entry_id"), str)
+        else None,
     )
 
 
 class OPNsenseDeviceScanner(DeviceScanner):
     """This class queries a router running OPNsense."""
 
-    def __init__(self, client: OPNsenseClientProtocol, interfaces: list[str]) -> None:
+    def __init__(
+        self,
+        client: OPNsenseClientProtocol,
+        interfaces: list[str],
+        hass: HomeAssistant,
+        entry_id: str | None,
+    ) -> None:
         """Initialize the scanner."""
         self.last_results: dict[str, Any] = {}
         self.client = client
         self.interfaces = interfaces
+        self._hass = hass
+        self.entry_id = entry_id
 
     def _get_mac_addrs(
         self, devices: list[dict[str, Any]]
@@ -66,6 +84,7 @@ class OPNsenseDeviceScanner(DeviceScanner):
     async def async_scan_devices(self) -> list[str]:
         """Scan for new devices and return a list with found device IDs."""
         await self.async_update_info()
+        await self._async_persist_tracked_macs()
         return list(self.last_results)
 
     async def async_get_device_name(self, device: str) -> str | None:
@@ -89,3 +108,23 @@ class OPNsenseDeviceScanner(DeviceScanner):
         if not isinstance(mfg, str) or not mfg:
             return {}
         return {"manufacturer": mfg}
+
+    async def _async_persist_tracked_macs(self) -> None:
+        """Persist tracked MAC metadata for Step 1 migration."""
+        if not self.entry_id:
+            return
+
+        entry = self._hass.config_entries.async_get_entry(self.entry_id)
+        if entry is None:
+            return
+
+        tracked_macs = [
+            mac.lower() for mac in self.last_results if isinstance(mac, str)
+        ]
+        existing_macs = entry.data.get(TRACKED_MACS, [])
+        if tracked_macs == existing_macs:
+            return
+
+        new_data = dict(entry.data)
+        new_data[TRACKED_MACS] = tracked_macs
+        self._hass.config_entries.async_update_entry(entry, data=new_data)

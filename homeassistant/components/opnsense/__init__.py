@@ -27,11 +27,13 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_API_SECRET,
+    CONF_DEVICE_UNIQUE_ID,
     CONF_INTERFACE_CLIENT,
     CONF_TRACKER_INTERFACES,
     DOMAIN,
     INTEGRATION_TITLE,
     OPNSENSE_DATA,
+    TRACKED_MACS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -167,6 +169,13 @@ class OPNsenseClientAdapter:
 
         return list(dict.fromkeys(interfaces))
 
+    async def async_get_device_unique_id(self) -> str | None:
+        """Return device unique id when available."""
+        device_id = await self._client.get_device_unique_id()
+        if not isinstance(device_id, str) or not device_id:
+            return None
+        return device_id
+
     async def async_close(self) -> None:
         """Close underlying client resources."""
         await self._client.async_close()
@@ -237,7 +246,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     try:
-        await client.async_get_arp()
+        arp_entries = await client.async_get_arp()
     except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
         raise ConfigEntryNotReady(
             "Failure while connecting to OPNsense API endpoint"
@@ -256,6 +265,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 raise ConfigEntryNotReady(
                     f"Specified OPNsense tracker interface {interface} is not found"
                 )
+
+    migrated_data = dict(entry.data)
+    tracked_macs: list[str] = []
+    for arp_entry in arp_entries:
+        mac = arp_entry.get("mac")
+        if isinstance(mac, str):
+            normalized = mac.lower()
+            if normalized and normalized not in tracked_macs:
+                tracked_macs.append(normalized)
+
+    device_unique_id = await client.async_get_device_unique_id()
+    if (
+        device_unique_id
+        and migrated_data.get(CONF_DEVICE_UNIQUE_ID) != device_unique_id
+    ):
+        migrated_data[CONF_DEVICE_UNIQUE_ID] = device_unique_id
+    if tracked_macs:
+        migrated_data[TRACKED_MACS] = tracked_macs
+    if migrated_data != entry.data or entry.unique_id != device_unique_id:
+        hass.config_entries.async_update_entry(
+            entry,
+            data=migrated_data,
+            unique_id=device_unique_id or entry.unique_id,
+        )
 
     entry.runtime_data = {
         CONF_INTERFACE_CLIENT: client,
