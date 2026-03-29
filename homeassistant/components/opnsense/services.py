@@ -46,6 +46,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     """Create the OPNsense HA Services/Actions."""
     enabled_services: set[str] = {
         SERVICE_CLOSE_NOTICE,
+        SERVICE_SYSTEM_HALT,
+        SERVICE_SYSTEM_REBOOT,
         SERVICE_SEND_WOL,
         SERVICE_RELOAD_INTERFACE,
     }
