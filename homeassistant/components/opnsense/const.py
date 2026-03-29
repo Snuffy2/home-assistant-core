@@ -19,6 +19,7 @@ PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.DEVICE_TRACKER,
     Platform.SENSOR,
+    Platform.SWITCH,
     Platform.UPDATE,
 ]
 LOADED_PLATFORMS = "loaded_platforms"
@@ -70,6 +71,8 @@ GRANULAR_SYNC_ITEMS = (
     CONF_SYNC_CARP,
     CONF_SYNC_FIRMWARE_UPDATES,
     CONF_SYNC_CERTIFICATES,
+    CONF_SYNC_SERVICES,
+    CONF_SYNC_VPN,
 )
 GRANULAR_SYNC_PREFIX = {
     CONF_SYNC_CARP: ["carp"],
