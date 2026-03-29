@@ -55,6 +55,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_RELOAD_INTERFACE,
         SERVICE_GENERATE_VOUCHERS,
         SERVICE_KILL_STATES,
+        SERVICE_RUN_SPEEDTEST,
+        SERVICE_GET_VNSTAT_METRICS,
         SERVICE_TOGGLE_ALIAS,
     }
 
