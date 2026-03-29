@@ -44,7 +44,11 @@ _VNSTAT_PERIODS: tuple[str, ...] = ("hourly", "daily", "monthly", "yearly")
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Create the OPNsense HA Services/Actions."""
-    enabled_services: set[str] = {SERVICE_SEND_WOL, SERVICE_RELOAD_INTERFACE}
+    enabled_services: set[str] = {
+        SERVICE_CLOSE_NOTICE,
+        SERVICE_SEND_WOL,
+        SERVICE_RELOAD_INTERFACE,
+    }
 
     # Keep the full service list explicit so each staged PR only expands this set.
     service_order: tuple[str, ...] = (
